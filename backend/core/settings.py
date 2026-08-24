@@ -70,6 +70,8 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
+AUTH_USER_MODEL = "accounts.User"
+
 LANGUAGE_CODE = 'tr-tr'
 TIME_ZONE = 'Europe/Istanbul'
 USE_I18N = True
