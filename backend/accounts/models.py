@@ -2,8 +2,9 @@
 # kimlik doğrulamaya ve profil yönetimine ait veritabanı 
 # tablolarının (models) tanımlandığı yerdir.
 
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, UserManager
 from django.db import models
+
 
 class UserRole(models.TextChoices):
     ADMIN = "ADMIN", "Yönetici"
@@ -14,16 +15,11 @@ class UserRole(models.TextChoices):
 class User(AbstractUser):
     """
     Otel PMS özel kullanıcı modeli.
-    Email zorunlu ve teklidir. Rol bazlı yetkilendirme sağlar.
+    Email zorunlu ve tekildir. Rol bazlı yetkilendirme sağlar.
     """
-
-    USERNAME_FIELD = "email"
-
-    REQUIRED_FIELDS = ["username", "role"]
-
     email = models.EmailField(unique=True, verbose_name="E-Posta Adresi")
     role = models.CharField(
-        max_length=30,
+        max_length=20,
         choices=UserRole.choices,
         default=UserRole.RECEPTION,
         verbose_name="Kullanıcı Rolü",
@@ -36,6 +32,11 @@ class User(AbstractUser):
         verbose_name="Telefon Numarası",
     )
 
+    objects = UserManager()
+
+    USERNAME_FIELD = "username"
+    EMAIL_FIELD = "email"
+    REQUIRED_FIELDS = ["email", "role"]
 
     class Meta:
         verbose_name = "Kullanıcı"
@@ -43,10 +44,8 @@ class User(AbstractUser):
         ordering = ["-date_joined"]
 
     def __str__(self) -> str:
-      return (
-          f"{self.email} ({self.get_role_display()})"  # type: ignore[attr-defined]
-      )
-
+        return f"{self.username} ({self.get_role_display()})" # type: ignore
+    
     @property
     def is_hotel_admin(self) -> bool:
         return self.role == UserRole.ADMIN or self.is_superuser
