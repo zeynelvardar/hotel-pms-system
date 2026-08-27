@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     'corsheaders',
     # Local apps
     'accounts',
+    'rooms',
 ]
 
 MIDDLEWARE = [
@@ -108,3 +109,4 @@ CORS_ALLOW_CREDENTIALS = True
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
+
