@@ -1,3 +1,96 @@
-from django.test import TestCase
+"""
+Rooms ve RoomType API uç noktaları için rol tabanlı yetkilendirme (RBAC) 
+ve CRUD operasyonlarını doğrulayan entegrasyon testleri.
+"""
 
-# Create your tests here.
+from decimal import Decimal
+from typing import cast
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.test import APIClient, APITestCase
+from accounts.models import User, UserRole
+from rooms.models import Room, RoomStatus, RoomType
+
+
+class RoomsApiTestCase(APITestCase):
+    client: APIClient
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+        # Admin ve Resepsiyonist kullanıcıları
+        self.admin_user = User.objects.create_user(
+            username="admin_user",
+            email="admin_test@hotel.com",
+            password="Password123!",
+            role=UserRole.ADMIN,
+        )
+        self.reception_user = User.objects.create_user(
+            username="reception_user",
+            email="rec_test@hotel.com",
+            password="Password123!",
+            role=UserRole.RECEPTION,
+        )
+
+        # Temel Oda Tipi ve Örnek Oda
+        self.standard_type = RoomType.objects.create(
+            name="Standart Oda",
+            code="STD",
+            base_price=Decimal("1500.00"),
+            max_adults=2,
+            max_children=1,
+        )
+        self.room_101 = Room.objects.create(
+            room_number="101",
+            room_type=self.standard_type,
+            floor=1,
+            status=RoomStatus.VC,
+        )
+
+    def test_receptionist_can_list_rooms_but_cannot_create_room_type(self) -> None:
+        """Resepsiyonist odaları okuyabilmeli ama yeni oda tipi ekleyememelidir."""
+        self.client.force_authenticate(user=self.reception_user)
+
+        # Okuma başarılı (200)
+        list_res = cast(Response, self.client.get(reverse("rooms:room-list")))
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+        self.assertIsInstance(list_res.data, list)
+        self.assertEqual(len(cast(list, list_res.data)), 1)
+
+        # Oda tipi oluşturma yetki hatası vermeli (403)
+        create_res = cast(
+            Response,
+            self.client.post(
+                reverse("rooms:room-type-list"),
+                {
+                    "name": "Deluxe Oda",
+                    "code": "DLX",
+                    "base_price": "2500.00",
+                    "max_adults": 3,
+                    "max_children": 1,
+                },
+                format="json",
+            ),
+        )
+        self.assertEqual(create_res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_can_create_room_and_room_type(self) -> None:
+        """Admin yeni oda tipi ve oda ekleyebilmelidir."""
+        self.client.force_authenticate(user=self.admin_user)
+
+        res = cast(
+            Response,
+            self.client.post(
+                reverse("rooms:room-list"),
+                {
+                    "room_number": "102",
+                    "room_type": self.standard_type.pk,
+                    "floor": 1,
+                    "status": RoomStatus.VC,
+                },
+                format="json",
+            ),
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Room.objects.count(), 2)
