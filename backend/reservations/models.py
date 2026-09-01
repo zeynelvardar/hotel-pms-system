@@ -8,7 +8,7 @@ from rooms.models import Room
 
 
 class ReservationStatus(models.TextChoices):
-    RESERVED = "RESERVATION", "Rezervasyon"
+    RESERVED = "RESERVED", "Rezerve (Bekliyor)"
     IN_HOUSE = "IN_HOUSE", "Konaklayan (In-House)"
     CHECKED_OUT = "CHECKED_OUT", "Ayrılan (Checked-Out)"
     CANCELLED = "CANCELLED", "İptal"
@@ -65,16 +65,16 @@ class Reservation(models.Model):
 
     def __str__(self) -> str:
         status_label = self.get_status_display() if hasattr(self, "get_status_display") else self.status
-        return f"#{self.pk} | Guest ID: {self.guest_id} -> Room ID: {self.room_id} ({status_label})"
+        return f"#{self.pk} | Misafir ID: {self.guest_id} -> Oda ID: {self.room_id} ({status_label})"
 
     def clean(self) -> None:
         super().clean()
 
-        # Kural 1: Check-out tarihi check-in tarihinden sonra olmalıdır.
+        # Kural 1: Day-Use serbest, ancak check-out tarihi check-in tarihinden önce olamaz.
         if self.check_in_date and self.check_out_date:
             if self.check_out_date < self.check_in_date:
                 raise ValidationError(
-                    {"check_out_date": "Check-out tarihi, check-in tarihinden önce olamaz."}
+                    {"check_out_date": "Check-out tarihi, check-in tarihinden önceki bir gün olamaz."}
                 )
 
         # Mevcut bir kayıt güncelleniyorsa durum geçiş (State Transition) kontrolleri
@@ -98,9 +98,8 @@ class Reservation(models.Model):
                             "Check-out yapılmış veya iptal edilmiş rezervasyonlar salt okunurdur. "
                             "Tarih veya statü değiştirilemez."
                         )
-                
+
                 # Kural 3: Gelecek tarihli rezervasyon vaktinden önce In-House'a alınamaz.
-                # (Bu kontrol Kural 2'nin dışına çıkarılarak doğru seviyeye hizalandı)
                 if (
                     old_instance.status == ReservationStatus.RESERVED
                     and self.status == ReservationStatus.IN_HOUSE
@@ -109,3 +108,7 @@ class Reservation(models.Model):
                         raise ValidationError(
                             {"status": "Check-in tarihi gelmemiş bir rezervasyon 'IN_HOUSE' durumuna alınamaz."}
                         )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
