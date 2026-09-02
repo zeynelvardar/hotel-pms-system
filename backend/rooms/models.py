@@ -44,8 +44,13 @@ class RoomType(models.Model):
         return f"{self.name} ({self.code})"
 
     def clean(self) -> None:
+        super().clean()
         if self.max_adults < 1:
             raise ValidationError({"max_adults": "Bir oda tipinde en az 1 yetişkin kapasitesi olmalıdır."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class Room(models.Model):
@@ -83,4 +88,15 @@ class Room(models.Model):
         ordering = ["room_number"]
 
     def __str__(self) -> str:
-        return f"Oda {self.room_number} - {self.room_type.code} [{self.get_status_display()}]" #type:ignore
+        return f"Oda {self.room_number} - {self.room_type.code} [{self.get_status_display()}]"  # type: ignore
+
+    def clean(self) -> None:
+        super().clean()
+        if self.room_number:
+            self.room_number = self.room_number.strip().upper()
+            if not self.room_number:
+                raise ValidationError({"room_number": "Oda numarası boş bırakılamaz."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)

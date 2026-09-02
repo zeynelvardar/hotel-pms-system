@@ -17,3 +17,4 @@ class RoomAdmin(admin.ModelAdmin):
     list_display = ("room_number", "room_type", "floor", "status", "is_active")
     list_filter = ("status", "floor", "is_active", "room_type")
     search_fields = ("room_number",)
+    list_select_related = ["room_type"]

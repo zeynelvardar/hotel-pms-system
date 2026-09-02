@@ -1,9 +1,13 @@
 from rest_framework import serializers
 from .models import RoomType, Room
 
+
 class RoomTypeSerializer(serializers.ModelSerializer):
-    """Oda tipleri için detaylı CRUD serializer'ı."""
-    total_rooms_count = serializers.IntegerField(source="rooms.count", read_only=True)
+    """
+    Oda tipleri için detaylı CRUD serializer'ı.
+    total_rooms_count queryset seviyesindeki annotate işleminden beslenir.
+    """
+    total_rooms_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = RoomType
@@ -20,6 +24,7 @@ class RoomTypeSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
 
 class RoomSerializer(serializers.ModelSerializer):
     """
