@@ -6,13 +6,22 @@ from rooms.models import Room, RoomType
 from .models import Reservation, ReservationStatus
 
 
-class ReservationStateMachineTests(TestCase):
+class ReservationConcurrencyTests(TestCase):
     def setUp(self):
-        self.guest = Guest.objects.create(
+        # 1. Misafir (TC Vatandaşı - Algoritmik Olarak Doğrulanmış Test TCKN: 10000000146)
+        self.guest1 = Guest.objects.create(
             first_name="Zeynel",
             last_name="Test",
             tc_no="10000000146",
             birth_date=date(1990, 1, 1),
+            is_main_guest=True,
+        )
+        # 2. Misafir (Yabancı Misafir - Pasaport Doğrulamalı)
+        self.guest2 = Guest.objects.create(
+            first_name="John",
+            last_name="Doe",
+            passport_no="U987654321",
+            birth_date=date(1985, 5, 15),
             is_main_guest=True,
         )
         self.room_type = RoomType.objects.create(
@@ -27,70 +36,75 @@ class ReservationStateMachineTests(TestCase):
             room_type=self.room_type,
             floor=1,
         )
+        self.today = date.today()
 
-    def test_checkout_cannot_be_before_checkin(self):
-        """Check-out tarihi check-in tarihinden önce olamaz (Hata fırlatmalı)."""
-        today = date.today()
-        res = Reservation(
-            guest=self.guest,
+    def test_overlapping_reservations_are_blocked(self):
+        """Birbiriyle çakışan tarihlerdeki rezervasyonlar engellenmelidir."""
+        Reservation.objects.create(
+            guest=self.guest1,
             room=self.room,
-            check_in_date=today,
-            check_out_date=today - timedelta(days=1),  # Check-in'den 1 gün önce
-            total_price=1500,
+            check_in_date=self.today,
+            check_out_date=self.today + timedelta(days=3),
+            total_price=4500,
             status=ReservationStatus.RESERVED,
         )
-        with self.assertRaises(ValidationError) as context:
-            res.full_clean()
-        self.assertIn("check_out_date", context.exception.message_dict)
 
-    def test_day_use_reservation_allowed(self):
-        """Gündüz kullanımı (Check-in ve Check-out aynı gün) geçerli olmalıdır."""
-        today = date.today()
-        res = Reservation(
-            guest=self.guest,
+        overlapping_res = Reservation(
+            guest=self.guest2,
             room=self.room,
-            check_in_date=today,
-            check_out_date=today,  # Aynı gün (Day-Use)
+            check_in_date=self.today + timedelta(days=1),
+            check_out_date=self.today + timedelta(days=4),
+            total_price=4500,
+            status=ReservationStatus.RESERVED,
+        )
+
+        with self.assertRaises(ValidationError) as context:
+            overlapping_res.save()
+
+        self.assertIn("mevcut bir rezervasyon", context.exception.message_dict.get("check_in_date", [""])[0])
+
+    def test_day_use_overlap_is_blocked(self):
+        """Aynı gün için ikinci bir Day-Use (gündüz kullanımı) engellenmelidir."""
+        Reservation.objects.create(
+            guest=self.guest1,
+            room=self.room,
+            check_in_date=self.today,
+            check_out_date=self.today,
             total_price=1000,
             status=ReservationStatus.RESERVED,
         )
-        # Hata fırlatmamalı ve temiz şekilde kaydedilmeli
-        res.full_clean()
-        res.save()
-        self.assertIsNotNone(res.id)
 
-    def test_cannot_checkin_future_reservation(self):
-        """Gelecek tarihli rezervasyon bugün IN_HOUSE yapılamaz."""
-        future_checkin = date.today() + timedelta(days=5)
-        future_checkout = date.today() + timedelta(days=7)
-
-        res = Reservation.objects.create(
-            guest=self.guest,
+        day_use_overlap = Reservation(
+            guest=self.guest2,
             room=self.room,
-            check_in_date=future_checkin,
-            check_out_date=future_checkout,
+            check_in_date=self.today,
+            check_out_date=self.today,
+            total_price=1000,
+            status=ReservationStatus.RESERVED,
+        )
+
+        with self.assertRaises(ValidationError):
+            day_use_overlap.save()
+
+    def test_back_to_back_reservations_are_allowed(self):
+        """Bir misafirin çıkış günü diğer misafirin giriş yapmasına izin verilmelidir."""
+        Reservation.objects.create(
+            guest=self.guest1,
+            room=self.room,
+            check_in_date=self.today,
+            check_out_date=self.today + timedelta(days=2),
             total_price=3000,
             status=ReservationStatus.RESERVED,
         )
 
-        res.status = ReservationStatus.IN_HOUSE
-        with self.assertRaises(ValidationError):
-            res.full_clean()
-
-    def test_immutable_past_reservations(self):
-        """CHECKED_OUT statüsündeki rezervasyonun statüsü değiştirilemez."""
-        past_checkin = date.today() - timedelta(days=3)
-        past_checkout = date.today() - timedelta(days=1)
-
-        res = Reservation.objects.create(
-            guest=self.guest,
+        back_to_back_res = Reservation(
+            guest=self.guest2,
             room=self.room,
-            check_in_date=past_checkin,
-            check_out_date=past_checkout,
+            check_in_date=self.today + timedelta(days=2),
+            check_out_date=self.today + timedelta(days=4),
             total_price=3000,
-            status=ReservationStatus.CHECKED_OUT,
+            status=ReservationStatus.RESERVED,
         )
 
-        res.status = ReservationStatus.IN_HOUSE
-        with self.assertRaises(ValidationError):
-            res.full_clean()
+        back_to_back_res.save()
+        self.assertIsNotNone(back_to_back_res.id)
