@@ -1,14 +1,19 @@
 from datetime import date, timedelta
+from typing import Any, cast
+from django.urls import reverse
+from rest_framework.test import APITestCase, APIClient
+from rest_framework.response import Response
+from rest_framework import status
 from django.test import TestCase
 from django.core.exceptions import ValidationError
+from accounts.models import User, UserRole
 from guests.models import Guest
 from rooms.models import Room, RoomType
 from .models import Reservation, ReservationStatus
 
 
 class ReservationConcurrencyTests(TestCase):
-    def setUp(self):
-        # 1. Misafir (TC Vatandaşı - Algoritmik Olarak Doğrulanmış Test TCKN: 10000000146)
+    def setUp(self) -> None:
         self.guest1 = Guest.objects.create(
             first_name="Zeynel",
             last_name="Test",
@@ -16,7 +21,6 @@ class ReservationConcurrencyTests(TestCase):
             birth_date=date(1990, 1, 1),
             is_main_guest=True,
         )
-        # 2. Misafir (Yabancı Misafir - Pasaport Doğrulamalı)
         self.guest2 = Guest.objects.create(
             first_name="John",
             last_name="Doe",
@@ -38,7 +42,7 @@ class ReservationConcurrencyTests(TestCase):
         )
         self.today = date.today()
 
-    def test_overlapping_reservations_are_blocked(self):
+    def test_overlapping_reservations_are_blocked(self) -> None:
         """Birbiriyle çakışan tarihlerdeki rezervasyonlar engellenmelidir."""
         Reservation.objects.create(
             guest=self.guest1,
@@ -63,7 +67,7 @@ class ReservationConcurrencyTests(TestCase):
 
         self.assertIn("mevcut bir rezervasyon", context.exception.message_dict.get("check_in_date", [""])[0])
 
-    def test_day_use_overlap_is_blocked(self):
+    def test_day_use_overlap_is_blocked(self) -> None:
         """Aynı gün için ikinci bir Day-Use (gündüz kullanımı) engellenmelidir."""
         Reservation.objects.create(
             guest=self.guest1,
@@ -86,7 +90,7 @@ class ReservationConcurrencyTests(TestCase):
         with self.assertRaises(ValidationError):
             day_use_overlap.save()
 
-    def test_back_to_back_reservations_are_allowed(self):
+    def test_back_to_back_reservations_are_allowed(self) -> None:
         """Bir misafirin çıkış günü diğer misafirin giriş yapmasına izin verilmelidir."""
         Reservation.objects.create(
             guest=self.guest1,
@@ -108,3 +112,67 @@ class ReservationConcurrencyTests(TestCase):
 
         back_to_back_res.save()
         self.assertIsNotNone(back_to_back_res.id)
+
+
+class ReservationDashBoardApiTests(APITestCase):
+    client: APIClient
+
+    def setUp(self) -> None:
+        self.receptionist = User.objects.create_user(
+            username="recep",
+            email="rec@hotel.com",
+            password="Pass123!",
+            role=UserRole.RECEPTION,
+        )
+        self.guest = Guest.objects.create(
+            first_name="API",
+            last_name="Test",
+            passport_no="P123",
+            birth_date=date(1990, 1, 1),
+            is_main_guest=True,
+        )
+        self.room_type = RoomType.objects.create(name="Std", code="STD", base_price=100)
+        self.room = Room.objects.create(room_number="101", room_type=self.room_type, floor=1)
+        self.today = date.today()
+
+        # Operasyonel test kayıtları
+        Reservation.objects.create(
+            guest=self.guest,
+            room=self.room,
+            check_in_date=self.today,
+            check_out_date=self.today + timedelta(days=2),
+            total_price=200,
+            status=ReservationStatus.RESERVED,
+        )
+        Reservation.objects.create(
+            guest=self.guest,
+            room=self.room,
+            check_in_date=self.today - timedelta(days=2),
+            check_out_date=self.today,
+            total_price=200,
+            status=ReservationStatus.IN_HOUSE,
+        )
+
+    def test_dashboard_endpoints_and_n_plus_one(self) -> None:
+        """Dashboard API endpoint'leri doğru veriyi döndürmeli ve N+1 sorgusu yaşatmamalıdır."""
+        self.client.force_authenticate(user=self.receptionist)
+
+        # 1. Gelecekler (Arrivals) Testi
+        with self.assertNumQueries(2):
+            raw_arrivals = self.client.get(reverse("reservations:reservation-arrivals-today"))
+            res_arrivals: Response = cast(Response, raw_arrivals)
+            data_arrivals: dict[str, Any] = cast(dict[str, Any], res_arrivals.data)
+
+            self.assertEqual(res_arrivals.status_code, status.HTTP_200_OK)
+            self.assertEqual(len(data_arrivals["results"]), 1)
+            self.assertEqual(data_arrivals["results"][0]["status"], "RESERVED")
+
+        # 2. Ayrılacaklar (Departures) Testi
+        with self.assertNumQueries(2):
+            raw_departures = self.client.get(reverse("reservations:reservation-departures-today"))
+            res_departures: Response = cast(Response, raw_departures)
+            data_departures: dict[str, Any] = cast(dict[str, Any], res_departures.data)
+
+            self.assertEqual(res_departures.status_code, status.HTTP_200_OK)
+            self.assertEqual(len(data_departures["results"]), 1)
+            self.assertEqual(data_departures["results"][0]["status"], "IN_HOUSE")
