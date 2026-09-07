@@ -176,3 +176,84 @@ class ReservationDashBoardApiTests(APITestCase):
             self.assertEqual(res_departures.status_code, status.HTTP_200_OK)
             self.assertEqual(len(data_departures["results"]), 1)
             self.assertEqual(data_departures["results"][0]["status"], "IN_HOUSE")
+
+
+class ReservationActionApiTests(APITestCase):
+    client: APIClient
+
+    def setUp(self) -> None:
+        self.receptionist = User.objects.create_user(
+            username="recep_action",
+            email="rec2@hotel.com",
+            password="Pass123!",
+            role=UserRole.RECEPTION,
+        )
+        self.guest = Guest.objects.create(
+            first_name="Action",
+            last_name="Test",
+            passport_no="ACT123",
+            birth_date=date(1990, 1, 1),
+            is_main_guest=True,
+        )
+        self.room_type = RoomType.objects.create(name="Suite", code="SUT", base_price=2000)
+        self.room = Room.objects.create(room_number="201", room_type=self.room_type, floor=2)
+        self.today = date.today()
+
+        self.client.force_authenticate(user=self.receptionist)
+
+    def test_successful_check_in_and_check_out(self) -> None:
+        res = Reservation.objects.create(
+            guest=self.guest,
+            room=self.room,
+            check_in_date=self.today,
+            check_out_date=self.today + timedelta(days=2),
+            total_price=4000,
+            status=ReservationStatus.RESERVED,
+        )
+
+        # Check-in İşlemi
+        checkin_url = reverse("reservations:reservation-check-in", args=[res.pk])
+        raw_response_in = self.client.post(checkin_url)
+        response_in: Response = cast(Response, raw_response_in)
+        self.assertEqual(response_in.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_in.data["status"], ReservationStatus.IN_HOUSE)  # type: ignore
+
+        # Check-out İşlemi
+        checkout_url = reverse("reservations:reservation-check-out", args=[res.pk])
+        raw_response_out = self.client.post(checkout_url)
+        response_out: Response = cast(Response, raw_response_out)
+        self.assertEqual(response_out.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_out.data["status"], ReservationStatus.CHECKED_OUT)  # type: ignore
+
+    def test_cannot_checkout_reserved_booking(self) -> None:
+        res = Reservation.objects.create(
+            guest=self.guest,
+            room=self.room,
+            check_in_date=self.today,
+            check_out_date=self.today + timedelta(days=2),
+            total_price=4000,
+            status=ReservationStatus.RESERVED,
+        )
+
+        checkout_url = reverse("reservations:reservation-check-out", args=[res.pk])
+        raw_response = self.client.post(checkout_url)
+        response: Response = cast(Response, raw_response)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("IN_HOUSE", str(response.data))
+
+    def test_cancel_reservation(self) -> None:
+        """Bekleyen bir rezervasyonun iptal işlemini doğrular."""
+        res = Reservation.objects.create(
+            guest=self.guest,
+            room=self.room,
+            check_in_date=self.today,
+            check_out_date=self.today + timedelta(days=2),
+            total_price=4000,
+            status=ReservationStatus.RESERVED,
+        )
+
+        cancel_url = reverse("reservations:reservation-cancel", args=[res.pk])
+        raw_response = self.client.post(cancel_url)
+        response: Response = cast(Response, raw_response)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], ReservationStatus.CANCELLED)  # type: ignore
