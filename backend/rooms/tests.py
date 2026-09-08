@@ -94,3 +94,35 @@ class RoomsApiTestCase(APITestCase):
         )
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Room.objects.count(), 2)
+
+
+    def test_housekeeping_can_change_room_status(self) -> None:
+        """Housekeeping personeli odanın statüsünü başarıyla güncelleyebilmelidir."""
+        hk_user = User.objects.create_user(
+            username="hk_user", email="hk@hotel.com", password="Password123!", role=UserRole.HOUSEKEEPING
+        )
+        self.client.force_authenticate(user=hk_user)
+        
+        # .id yerine .pk kullanıldı (Pylance tip uyumluluğu)
+        url = reverse("rooms:room-change-status", args=[self.room_101.pk])
+        # cast(Response, ...) ile status_code erişimi garanti altına alındı
+        res = cast(Response, self.client.patch(url, {"status": RoomStatus.VD}, format="json"))
+        
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.room_101.refresh_from_db()
+        self.assertEqual(self.room_101.status, RoomStatus.VD)
+
+    def test_housekeeping_cannot_change_room_type(self) -> None:
+        """Housekeeping yetkisi sadece statü içindir, oda tipini veya numarasını değiştiremez."""
+        hk_user = User.objects.create_user(
+            username="hk_user2", email="hk2@hotel.com", password="Password123!", role=UserRole.HOUSEKEEPING
+        )
+        self.client.force_authenticate(user=hk_user)
+        
+        # .id yerine .pk kullanıldı
+        url = reverse("rooms:room-detail", args=[self.room_101.pk])
+        # cast(Response, ...) ile status_code erişimi garanti altına alındı
+        res = cast(Response, self.client.patch(url, {"room_number": "999"}, format="json"))
+        
+        # Sadece Admin güncelleyebildiği için 403 dönmelidir
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)

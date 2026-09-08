@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import RoomType, Room
+from .models import RoomType, Room, RoomStatus
 
 
 class RoomTypeSerializer(serializers.ModelSerializer):
@@ -55,3 +55,15 @@ class RoomSerializer(serializers.ModelSerializer):
         if not cleaned_value:
             raise serializers.ValidationError("Oda numarası boş bırakılamaz.")
         return cleaned_value
+
+class RoomStatusUpdateSerializer(serializers.ModelSerializer):
+    """Housekeeping operasyonları için sadece statü değişimine izin veren serializer."""
+    class Meta:
+        model = Room
+        fields = ["status"]
+
+    def validate_status(self, value):
+        valid_statuses = [choice[0] for choice in RoomStatus.choices]
+        if value not in valid_statuses:
+            raise serializers.ValidationError("Geçersiz oda statüsü.")
+        return value

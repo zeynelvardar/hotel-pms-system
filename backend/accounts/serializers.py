@@ -2,6 +2,8 @@ from typing import Any, Dict, cast
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import Token
+
+from rooms.models import Room, RoomStatus
 from .models import User
 
 
@@ -58,3 +60,5 @@ class UserSerializer(serializers.ModelSerializer):
             "is_active",
         ]
         read_only_fields = ["id", "role"]
+
+
