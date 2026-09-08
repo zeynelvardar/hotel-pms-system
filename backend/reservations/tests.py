@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.core.exceptions import ValidationError
 from accounts.models import User, UserRole
 from guests.models import Guest
-from rooms.models import Room, RoomType
+from rooms.models import Room, RoomType, RoomStatus
 from .models import Reservation, ReservationStatus
 
 
@@ -202,6 +202,7 @@ class ReservationActionApiTests(APITestCase):
         self.client.force_authenticate(user=self.receptionist)
 
     def test_successful_check_in_and_check_out(self) -> None:
+        """Check-in ve Check-out işlemlerinin hem rezervasyon hem de ODA statüsünü (OC/VD) güncellediğini doğrular."""
         res = Reservation.objects.create(
             guest=self.guest,
             room=self.room,
@@ -211,19 +212,27 @@ class ReservationActionApiTests(APITestCase):
             status=ReservationStatus.RESERVED,
         )
 
-        # Check-in İşlemi
+        # 1. Check-in İşlemi
         checkin_url = reverse("reservations:reservation-check-in", args=[res.pk])
         raw_response_in = self.client.post(checkin_url)
         response_in: Response = cast(Response, raw_response_in)
         self.assertEqual(response_in.status_code, status.HTTP_200_OK)
         self.assertEqual(response_in.data["status"], ReservationStatus.IN_HOUSE)  # type: ignore
 
-        # Check-out İşlemi
+        # Oda statüsü OC (Occupied Clean) olmalıdır
+        self.room.refresh_from_db()
+        self.assertEqual(self.room.status, RoomStatus.OC)
+
+        # 2. Check-out İşlemi
         checkout_url = reverse("reservations:reservation-check-out", args=[res.pk])
         raw_response_out = self.client.post(checkout_url)
         response_out: Response = cast(Response, raw_response_out)
         self.assertEqual(response_out.status_code, status.HTTP_200_OK)
         self.assertEqual(response_out.data["status"], ReservationStatus.CHECKED_OUT)  # type: ignore
+
+        # Oda statüsü VD (Vacant Dirty) olmalıdır
+        self.room.refresh_from_db()
+        self.assertEqual(self.room.status, RoomStatus.VD)
 
     def test_cannot_checkout_reserved_booking(self) -> None:
         res = Reservation.objects.create(
