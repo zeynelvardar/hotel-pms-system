@@ -67,3 +67,46 @@ class RoomStatusUpdateSerializer(serializers.ModelSerializer):
         if value not in valid_statuses:
             raise serializers.ValidationError("Geçersiz oda statüsü.")
         return value
+
+
+class RoomRackSerializer(serializers.ModelSerializer):
+    """
+    Room Rack (Oda Planı) için özel, hafifletilmiş ve birleştirilmiş serializer.
+    """
+    room_type_code = serializers.CharField(source='room_type.code', read_only=True)
+    active_reservation = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Room
+        fields = [
+            'id', 
+            'room_number', 
+            'floor', 
+            'status', 
+            'room_type_code', 
+            'active_reservation'
+        ]
+
+    def get_active_reservation(self, obj):
+        # View katmanında 'Prefetch(to_attr="relevant_reservations")' kullandığımız için
+        # obj.relevant_reservations üzerinden N+1 yapmadan ramdeki veriye erişiyoruz.
+        reservations = getattr(obj, 'relevant_reservations', [])
+        
+        if not reservations:
+            return None
+            
+        # Öncelik IN_HOUSE konaklayanda. Eğer yoksa, bugün giriş yapacak (RESERVED) kişiyi al.
+        active_res = next((r for r in reservations if r.status == "IN_HOUSE"), None)
+        if not active_res:
+            active_res = reservations[0] # Bugün gelecek kişi
+
+        return {
+            "id": active_res.id,
+            "guest_name": f"{active_res.guest.first_name} {active_res.guest.last_name}",
+            "status": active_res.status,
+            "check_in_date": active_res.check_in_date,
+            "check_out_date": active_res.check_out_date,
+        }
+
+
+    
