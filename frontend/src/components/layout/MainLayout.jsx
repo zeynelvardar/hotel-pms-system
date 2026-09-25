@@ -9,7 +9,7 @@ const MainLayout = () => {
     const { user, logout } = useAuth(); //kulanıcı kim?, log out butonunu çalıştıran fonksiyon
     const navigate = useNavigate(); //sayfalar arası ışınlanma kutusu değişkene atanır
 
-    const handleOut = () => { //oturum kapama
+    const handleLogout = () => { //oturum kapama
         logout();
         navigate('/login');
     };
