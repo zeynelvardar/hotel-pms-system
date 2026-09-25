@@ -12,18 +12,18 @@ const Login = () => {
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!username || !password) { // sayfanın yenilenmesini engeller.
+    e.preventDefault(); // sayfanın yenilenmesini engeller.
+    if (!username || !password) { 
       toast.error('Lütfen tüm alanları doldurun.');
       return;
     }
 
-    setIsSubmitting(true);
-    try {
+    setIsSubmitting(true); // butona basılan adnan backend'den cevap gelene kadarki sürede formun "gönderilme aşamasında" olduğunu takip eden bayraktır. (boolean state) / çift tıklamayı engeller
+    try { 
       await login(username, password);
       toast.success('Giriş başarılı! Yönlendiriliyorsunuz...');
       setTimeout(() => {
-        navigate('/');
+        navigate('/rack');
       }, 600);
     } catch (err) {
       const errorMsg =
