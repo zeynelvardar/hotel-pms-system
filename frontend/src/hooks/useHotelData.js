@@ -1,7 +1,8 @@
 /**
  * useHotelData.js: hotelService.js ile arayüz bileşenlerinin (RoomRack, Dashboard.jsx)
  * arasına yerleşir. Verileri servis dosyasından Cache'e alarak hızlı arayüz
- * kullanımını sağlar.
+ * kullanımını sağlar. (dosyadan fonksiyon çağırılana kadar bir şey yapmaz.
+ * React'dan çağırıldıktan sonra işlemi gerçekleştirir.)
  * 
  * Veri Bağlama: Bileşenlerin hangi veriyi istediğini söylemesini sağlar.
  * Oto Yaşam Döngüsü/Durum Yönetimi: Her hook; isLoading, isSuccess, isError,
