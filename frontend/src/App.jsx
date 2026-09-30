@@ -11,9 +11,8 @@ import ProtectedRoute from './components/routes/ProtectedRoute';
 import MainLayout from './components/layout/MainLayout';
 import Login from './pages/Login';
 import RoomRack from './pages/RoomRack'
+import Dashboard from './pages/Dashboard';
 
-// Dashboard ve RoomRack henüz kodlanmadığı için geçici tutuyoruz
-const Dashboard = () => <div className="bg-white p-6 rounded-lg border border-slate-200">Front Desk Panosu</div>;
 
 function App() {
   return (
