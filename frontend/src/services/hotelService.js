@@ -30,5 +30,17 @@ export const hotelService = {
     getInHouse: async () => {
         const response = await api.get('reservations/dashboard/in-house/');
         return response.data.results || response.data;
-    }
+    },
+
+    getAvailableRooms: async (checkIn, checkOut) => {
+        const response = await api.get('rooms/available', {
+            params: { check_in: checkIn, check_out: checkOut }
+        });
+        return response.data;
+    },
+
+    createReservation: async (reservationData) => {
+        const response = await api.post('reservations/', reservationData);
+        return response.data;
+    },
 };
