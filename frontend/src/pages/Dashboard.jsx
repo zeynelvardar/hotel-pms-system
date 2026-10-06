@@ -12,14 +12,15 @@
  * 
  */
 
+import NewReservationModal from '../components/dashboard/NewReservationModal';
 import { useState, useMemo } from 'react' // useMemo: maliyetli bir hesaplama sonucunu cache'de tutmaya yarayan RH.
-import { useDashBoardArrivals, useDashBoardDepartures, useDashBoardInHouse } from '../hooks/useHotelData'; 
+import { useDashBoardArrivals, useDashBoardDepartures, useDashBoardInHouse } from '../hooks/useHotelData';
 import ReservationTable from '../components/dashboard/ReservationTable';
-import { LogIn, LogOut, Users, RefreshCw } from 'lucide-react';
+import { LogIn, LogOut, Users, RefreshCw, Plus } from 'lucide-react';
 
 const Dashboard = () => { // state (durum kutusu) kurulur, React hafızaya bakar ve 
-  const [activeTab, setActiveTab] = useState('arrivals'); // kutunun ilk değerini arrivals olarak ayarlar
-  // İlk gelen sayfa arrivals listesi olur.
+  const [activeTab, setActiveTab] = useState('arrivals'); // kutunun ilk değerini arrivals olarak ayarlar // İlk gelen sayfa arrivals listesi olur.
+  const [isModalOpen, setIsModalOpen] = useState(false); // Modal State'i
 
   // Tanstack Query ile tüm verileri paralel çek (otomatik deduping ve caching yapar.)
   const arrivalsQuery = useDashBoardArrivals(); // arrivals cache'e alınır.
@@ -71,14 +72,25 @@ const Dashboard = () => { // state (durum kutusu) kurulur, React hafızaya bakar
           <h2 className="text-2xl font-bold tracking-tight text-slate-800">Operasyon Panosu</h2>
           <p className="text-sm text-slate-500 mt-0.5">Günlük resepsiyon akışı ve hızlı işlemler</p>
         </div>
-        {isSyncing && (
-          <div className="flex items-center gap-2 text-xs font-semibold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100 w-max">
-            <RefreshCw size={14} className="animate-spin" /> Arka planda eşitleniyor...
-          </div>
-        )}
+        
+        <div className="flex items-center gap-3">
+          {isSyncing && (
+            <div className="flex items-center gap-2 text-xs font-semibold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100">
+              <RefreshCw size={14} className="animate-spin" /> Arka planda eşitleniyor...
+            </div>
+          )}
+
+          {/* Yeni Rezervasyon Butonu */}
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition"
+          >
+            <Plus size={18} /> Yeni Rezervasyon
+          </button>
+        </div>
       </div>
       
-      {/* Sekmeler (Tab Cars) maps'den itibaren kod döngü olarak çalışır.*/} 
+      {/* Sekmeler (Tab Cards) maps'den itibaren kod döngü olarak çalışır.*/} 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {tabs.map((tab) => { // tabloları döngüye sokar (arrivals-departure-inHouse)
           const Icon = tab.icon; // iconu çeker 
@@ -90,7 +102,7 @@ const Dashboard = () => { // state (durum kutusu) kurulur, React hafızaya bakar
               onClick={() => setActiveTab(tab.id)} // tıklanan kartın kimliğini (arrivals/departures/inHouse) state'e aktararak aktif sekmeyi günceller.
               className={`flex items-center justify-between p-5 rounded-xl border-2 transition-all text-left ${
                 isActive // eğer kart seçiliyse
-                  ? tab.activeClass  // seçili olan durumu (arrival-departure-inHouse) butonun rengini aşşağıdaki gibi yapar
+                  ? tab.activeClass  // seçili olan durumu (arrival-departure-inHouse) butonun rengini aşağıdaki gibi yapar
                   : 'bg-white border-slate-200 hover:border-slate-300 text-slate-600 hover:shadow-sm'
               }`}
             >   {/* seçili karta göre (arr-dep-inh) icon renderlanır. */}
@@ -116,7 +128,13 @@ const Dashboard = () => { // state (durum kutusu) kurulur, React hafızaya bakar
       <ReservationTable
         data={activeData.data}  // seçilen aktif sorgunun (arr,dep,ihouse) içindeki rezervasyon array'ini aktarır.
         type={activeTab} // hangi sekmenin açık olduğunu belirten metni aktarır.
-        isLoading={activeData.isLoading} // seçili sorgunun genüz backend'den veri çekip çekmediğini bildiren true/false değerini aktarır.
+        isLoading={activeData.isLoading} // seçili sorgunun henüz backend'den veri çekip çekmediğini bildiren true/false değerini aktarır.
+      />
+
+      {/* Yeni Rezervasyon Modal Bileşeni Çağrısı */}
+      <NewReservationModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
       />
     </div>
   );
