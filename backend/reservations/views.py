@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from accounts.permissions import IsReceptionOrAdmin
 from core.pagination import StandardResultsSetPagination
 from .models import Reservation, ReservationStatus
-from .serializers import DashboardReservationSerializer
+from .serializers import DashboardReservationSerializer, ReservationCreateSerializer
 from .services import ReservationActionService
 
 class ReservationViewSet(viewsets.ModelViewSet):
@@ -15,7 +15,16 @@ class ReservationViewSet(viewsets.ModelViewSet):
     """
     permission_classes = [IsReceptionOrAdmin]
     pagination_class = StandardResultsSetPagination
-    serializer_class = DashboardReservationSerializer
+
+    def get_serializer_class(self):
+        """
+        Clean Code: Okuma ve Yazma sorumlulukları ayrılır.
+        Kayıt (create) esnasında ReservationCreateSerializer,
+        diğer durumlarda optimize DashboardReservationSerializer kullanılır.
+        """
+        if self.action in ["create", "update", "partial_update"]:
+            return ReservationCreateSerializer
+        return DashboardReservationSerializer
 
     def get_queryset(self):
         return Reservation.objects.select_related(
