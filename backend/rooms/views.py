@@ -7,7 +7,7 @@ from accounts.permissions import (
     IsHotelAdmin,
     IsHotelStaffUser,
 )
-from .models import RoomType, Room
+from .models import RoomType, Room, RoomStatus
 from .serializers import (
     RoomTypeSerializer,
     RoomSerializer,
@@ -97,6 +97,56 @@ class RoomViewSet(viewsets.ModelViewSet):
             rack_data[floor_key].append(self.get_serializer(room).data)
 
         return Response(rack_data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"], url_path="available")
+    def availabe(self, request):
+        """
+        Check-in ve Check-out tarihlerinde çakışan rezervasyonu bulunmayan
+        ve arızalı (OOO) olmayan odaları listeler.
+        URL: /api/rooms/available/?check_in=YYYY-MM-DD&check_out=YYYY-MM-DD
+        """
+        check_in_str = request.query_params.get("check_in")
+        check_out_str = request.query_params.get("check_out")
+
+        if not check_in_str or not check_out_str:
+            return Response(
+                {"detail": "check_in veya check_out parametreleri zorunludur."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            check_in = date.fromisoformat(check_in_str)
+            check_out = date.fromisoformat(check_out_str)
+        except ValueError:
+            return Response(
+                {"detail": "Tarih formatı geçersiz. YYYY-MM-DD olmalıdır."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if check_out < check_in:
+            return Response(
+                {"detail": "Check-out tarihi check-in tarihinden önce olamaz."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Çakışma Kuralı: (Res.CheckIn < Talep.CheckOut) ve (Res.CheckOut > Talep.CheckIn)
+        conflicting_room_ids = Reservation.objects.filter(
+            status__in=[ReservationStatus.RESERVED, ReservationStatus.IN_HOUSE],
+            check_in_date__lt=check_out,
+            check_out_date__gt=check_in,
+        ).values_list("room_id", flat=True)
+
+        available_rooms = (
+            Room.objects.select_related("room_type")
+            .filter(is_active=True)
+            .exclude(id__in=conflicting_room_ids)
+            .exclude(status=RoomStatus.OOO)
+            .order_by("floor", "room_number")
+        )
+
+        serializer = RoomSerializer(available_rooms, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 
     @action(detail=True, methods=["patch"], url_path="change-status")
