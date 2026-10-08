@@ -7,10 +7,12 @@
  *
  */
 
-import { Calendar, BedDouble, User } from 'lucide-react';
+import { Calendar, BedDouble, User, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useReservationAction } from '../../hooks/useHotelData';
 
 const ReservationTable = ({ data, type, isLoading }) => { // üst bileşenden gelen parametreler
+    const { checkIn, isCheckingIn, checkOut, isCheckingOut } = useReservationAction();
     if (isLoading) {
         return (
             <div className="flex flex-col items-center justify-center p-12 text-slate-500">
@@ -29,10 +31,6 @@ const ReservationTable = ({ data, type, isLoading }) => { // üst bileşenden ge
         );
     }
 
-    const handleAction = (reservationId, actionName) => {
-        // Faz 6.4'te gerçek api çağrılarına bağlanacak.
-        toast.success(`${actionName} işlemi Faz 6.4'te tamamlanacak. (ID: ${reservationId})`)
-    };
 
     return (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -82,18 +80,33 @@ const ReservationTable = ({ data, type, isLoading }) => { // üst bileşenden ge
                                     </td>
                                     <td className="py-3.5 px-5 text-right">
                                         {type === 'arrivals' && (
-                                            <button onClick={() => handleAction(item.id, 'Check-in')} className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition">
-                                                Check-in
+                                            <button
+                                            onClick={() => checkIn(item.id)}
+                                            disabled={isCheckingIn}
+                                            className="inline-flex items-center gap 1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-xs font-semibold transition curser-pointer"
+                                            >
+                                                {isCheckingIn && <Loader2 size={12} className="animate-spin"/>}
+                                                Check-in Yap
                                             </button>
                                         )}
                                         {type === 'departures' && (
-                                            <button onClick={() => handleAction(item.id, 'Check-out')} className="px-3 py-1.5 rounded bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold transition">
-                                                Check-out
+                                            <button
+                                            onClick={() => checkOut(item.id)}
+                                            disabled={isCheckingOut}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 text-white text-xs font-semibold transition cursor-pointer"
+                                            >
+                                                {isCheckingOut && <Loader2 size={12} className="animate-spin" />}
+                                                Check-out Yap
                                             </button>
                                         )}
                                         {type === 'inHouse' && (
-                                            <button onClick={() => handleAction(item.id, "Detay Gör")} className="px-3 py-1.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-semibold transition">
-                                                Yönet
+                                            <button
+                                            onClick={() => checkOut(item.id)}
+                                            disabled={isCheckingOut}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white text-xs font-semibold transition curser-pointer"
+                                            >
+                                                {isCheckingOut && <Loader2 size={12} className="animate-spin" />}
+                                                Hızlı Check-out
                                             </button>
                                         )}
                                     </td>

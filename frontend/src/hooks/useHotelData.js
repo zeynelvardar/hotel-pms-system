@@ -19,6 +19,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; /
 import { hotelService } from '../services/hotelService';
 import toast from 'react-hot-toast'
 
+
 // Room Rack verisini çeken ve arka planda güncelleyen hook
 export const useRoomRack = () => {
     return useQuery({
@@ -79,3 +80,41 @@ export const useCreateReservation = (onSuccessCallback) => { //parametre
     });
 };
 
+export const useReservationAction = () => {
+    const queryClient = useQueryClient(); // TSQuery'nin hafıza merkezine bağlanır ci/co yapıldığında veriyi tazeler.
+
+    const checkInMutation = useMutation({
+        mutationFn: (id) => hotelService.checkInReservation(id),
+        onSuccess: () => {
+            // Hem panoyu hem de oda durumunu (OC) aynı anda tazele.
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['roomRack'] });
+            toast.success('Misafir girişi (Check-in) başarıyla tamamlandı!');
+        },
+        onError: (error) => {
+            const msg = error.response?.data?.detail || 'Check-in işlemi gerçekleştirilemedi.';
+            toast.error(msg);
+        }
+    });
+
+    const checkOutMutation = useMutation({
+        mutationFn: (id) => hotelService.checkOutReservation(id),
+        onSuccess: () => {
+            // Hem panoyu hem de oda durumunu (VD) aynı anda tazele.
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['roomRack'] });
+            toast.success('Misafirin çıkışı (Check-Out) başarıyla tamamlandı!');
+        },
+        onError: (error) => {
+            const msg = error.response?.data?.detail || 'Check-out işlemi gerçekleştirilemedi.';
+            toast.error(msg);
+        }
+    });
+
+    return {
+        checkIn: checkInMutation.mutate,
+        isCheckingIn: checkInMutation.isPending,
+        checkOut: checkOutMutation.mutate,
+        isCheckingOut: checkOutMutation.isPending,
+    };
+};

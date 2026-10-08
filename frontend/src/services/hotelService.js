@@ -43,4 +43,14 @@ export const hotelService = {
         const response = await api.post('reservations/', reservationData);
         return response.data;
     },
+
+    checkInReservation: async (reservationId) => {
+        const response = await api.post(`reservations/${reservationId}/check-in/`);
+        return response.data;
+    },
+
+    checkOutReservation: async (reservationId) => {
+        const response = await api.post(`reservations/${reservationId}/check-out`);
+        return response.data;
+    },
 };
