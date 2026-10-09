@@ -50,7 +50,7 @@ export const hotelService = {
     },
 
     checkOutReservation: async (reservationId) => {
-        const response = await api.post(`reservations/${reservationId}/check-out`);
+        const response = await api.post(`reservations/${reservationId}/check-out/`);
         return response.data;
     },
 };
