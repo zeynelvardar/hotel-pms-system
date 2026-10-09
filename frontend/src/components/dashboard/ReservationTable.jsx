@@ -49,7 +49,7 @@ const ReservationTable = ({ data, type, isLoading }) => { // üst bileşenden ge
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                         {data.map((item) => {
                             // Backend'den gelen veririnin format güvenliği (N+A korumalı Serializer yapısına göre)
-                            const guestName = item.guest_name || `${item.guest?.first_name} ${item.guest?.last_name}`;
+                            const guestName = item.guest_full_name || item.guest_name || (item.guest?.first_name ? `${item.guest.first_name} ${item.guest.last_name || ''}`.trim() : 'İsimsiz Misafir');
                             const roomNumber = item.room_number || item.room?.room_number || 'Atanmadı';
                             const price = Number(item.total_price || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                             

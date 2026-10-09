@@ -10,6 +10,7 @@ class DashboardReservationSerializer(serializers.ModelSerializer):
     İlişkili verileri (Misafir ve Oda) düzleştirerek frontend'e hazır hale getirir.
     """
     guest_full_name = serializers.CharField(source="guest.__str__", read_only=True)
+    guest_name = serializers.CharField(source="guest.__str__", read_only=True)
     guest_phone = serializers.CharField(source="guest.phone", read_only=True)
     room_number = serializers.CharField(source="room.room_number", read_only=True)
     room_type_code = serializers.CharField(source="room.room_type.code", read_only=True)
@@ -20,6 +21,7 @@ class DashboardReservationSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "guest_full_name",
+            "guest_name",
             "guest_phone",
             "room_number",
             "room_type_code",
