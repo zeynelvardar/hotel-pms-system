@@ -12,7 +12,7 @@ import { validateTCKN, validatePassport } from '../../utils/validators';
 import { X, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const NewReservationModal = ({ isOpen, onClose }) => { // üst bileşenden alınan proplar (ekranda görünsün mü(bool) - sayfayı kapatma fonksiyonu)
+const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => { // üst bileşenden alınan proplar (ekranda görünsün mü(bool) - sayfayı kapatma fonksiyonu)
     // Bugünün tarihini YYYY-MM-DD formatında al
     const today = new Date().toISOString().split('T')[0]; // o anki tarih ve saati üretir.
     const tomorrow = new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0]; // bir sonraki günün tarihini otomatik 
@@ -37,6 +37,15 @@ const NewReservationModal = ({ isOpen, onClose }) => { // üst bileşenden alın
 
     // Form Gönderim Hook'u
     const createMutation = useCreateReservation(onClose); // Rezervasyon kayıt motorunu (mutation) hazırla; işlem başarıyla bittiğinde modalı kapatması için onClose fonksiyonunu emanet et.
+
+    // initialRoomId değiştiğinde formu otomatik güncelle
+    useEffect(() => {  // modal penceresi açıldığında veya seçilen oda değiştiğinde dışarıdan gelen prop'u formun içine (state) aktarır.
+        if (initialRoomId) { // kullanıcı modal'ı room rack'den belirli bir odaya tıklayarak açtıysa: 
+            setFormData(prev => ({ ...prev, roomId: String(initialRoomId) })); // modal'ın rezervasyon formundaki oda numarasını o oda yapar.
+        } else { // yeni rezervasyon butonundan açarsa da boş kalır.
+            setFormData(prev => ({ ...prev, roomId: '' }));
+        }
+    }, [initialRoomId, isOpen]); // bu bloğu sadece bu iki değişkenden biri değiştiğinde çalıştırır.
 
     // Kimlik numarasını anlık doğrulama
     useEffect(() => {

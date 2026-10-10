@@ -53,4 +53,9 @@ export const hotelService = {
         const response = await api.post(`reservations/${reservationId}/check-out/`);
         return response.data;
     },
+
+    changeRoomStatus: async (roomId, status) => {
+        const response = await api.patch(`rooms/${roomId}/change-status/`, { status });
+        return response.data;
+    },
 };

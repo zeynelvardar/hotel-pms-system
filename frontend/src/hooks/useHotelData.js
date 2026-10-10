@@ -118,3 +118,19 @@ export const useReservationAction = () => {
         isCheckingOut: checkOutMutation.isPending,
     };
 };
+
+export const useChangeRoomStatus = () => { // oda temizlik ve doluluk statülerini (CLEAN-DIRTY-OOO etc.) değiştiren hook.
+    const queryClient = useQueryClient();  // TS query'nin ön bellek yöneticisine erişim sağlar. İşlem bittiğinde hafızadaki verileri geçersiz kılmak için hazırda tutar.
+
+    return useMutation({ // sunucudaki veriyi değiştiren http isteklerini yönetir.
+        mutationFn: ({ roomId, status }) => hotelService.changeRoomStatus(roomId, status), // api bileşenine istek atar.
+        onSuccess: () => {
+            // Değişiklik anında Room Rack'i tazele.
+            queryClient.invalidateQueries({ queryKey: ['roomRack'] });
+            toast.success('Oda statüsü başarıyla güncellendi.');
+        },
+        onError: (error) => {
+            toast.error(error.response?.data?.detail || 'Oda statüsü güncellenemedi.');
+        }
+    });
+};
