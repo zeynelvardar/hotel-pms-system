@@ -2,77 +2,189 @@
  * roomRack.jsx : Room Rack ekranının sunum katmanıdır. (UI Layer)
  */
 
+import { useState, useMemo } from 'react';
 import { useRoomRack } from '../hooks/useHotelData';
-import { Loader2 } from 'lucide-react';
+import RoomDetailModal from '../components/rack/RoomDetailModal';
+import NewReservationModal from '../components/dashboard/newReservationModal';
+import { Loader2, AlertCircle, BedDouble, Filter, Plus } from 'lucide-react';
+
+
+// DRY Prensibi: Oda statü renklerini ve etiketlerini tek merkezden yönetiyoruz.
+const STATUS_CONFIG = {
+  ALL: { label: 'Tümü', badge: 'bg-slate-800 text-white' },
+  VC: { label: 'Boş Temiz (VC)', badge: 'bg-emerald-500 text-white', card: 'border-emerald-300 bg-emerald-50/50 hover:shadow-md text-emerald-900' },
+  VD: { label: 'Boş Kirli (VD)', badge: 'bg-rose-500 text-white', card: 'border-rose-300 bg-rose-50/50 hover:border-rose-500 hover:shadow-md text-rose-900' },
+  OC: { label: 'Dolu Temiz (OC)', badge: 'bg-blue-600 text-white', card: 'border-blue-300 bg-blue-50/50  hover:border-blue-500 hover:shadow-md text-blue-900' },
+  OD: { label: 'Dolu Kirli (OD)', badge: 'bg-amber-500 text-white', card: 'border-amber-300 bg-amber-50/50 hover:border-amber-500 hover:shadow-md text-amber-900' },
+  OOO: { label: 'Arızalı (OOO)', badge: 'bg-slate-500 text-white', card:'border-slate-300 bg-slate-100 hover:border-slate-400 hover:shadow-md text-slate-500 opacity-70' },
+
+};
 
 const RoomRack = () => {
-  const { data: rackData, isLoading, isError, error, isFetching } = useRoomRack();
+  const { data: rackData, isLoading, isError, error } = useRoomRack();  // odalarının durumunu django back'enden çekip tarayıcının cache'ine alındığı fonksiyondur. Nesne parçalma yapılır, lazım olanları almak için.
 
-  if (isLoading) {
+  const [filterStatus, setFilterStatus] = useState('ALL'); // Rack'i Ekrana Basar / filterStatus: okuma değişkeni / setFilterStatus: yazma değişkeni (güncelleme yapıldığında çağırılır)
+  const [selectedDetailRoom, setSelectedDetailRoom] = useState(null); // Ekranda hangi odanın detay modal'ının açık olduğunu/olmadığını takip eden hafıza kutusudur.
+  const [selectedResRoomId, setSelectedResRoomId] = useState(null); // Hızlı rezervasyon / Check-in modalının açık olup olmadığını takip eden hafıza kutusudur.
+
+  // İş Mantığı Yönlendiricisi
+  const handleRoomClick = (room) => {
+    // 1. Kural: Dolu veya Hizmet Dışı (OOO) odalarda her zaman detay penceresi açılır.
+    const isOccupiedOrBlocked = ['OC', 'OD', 'OOO'].includes(room.status); // includes = içindeki değerlerden biri varsa true yoksa false döner. Operasyon kontrolü bu şekilde sağlanır.
+    
+    if (isOccupiedOrBlocked) {
+      setSelectedDetailRoom(room);
+      return;
+    }
+
+    // 2. Kural: Fiziksel olarak boş odalar (VC, VD).
+    // İster doğrudan rezervasyon açtır, ister üzerine aktif giriş bekleyen rezervasyon var ise detaya yönlendir:
+    setSelectedResRoomId(room.id);
+
+
+  }
+
+  // Frontend Filtreleme 
+  const filteredRack = useMemo(() => { // rack verisi filtrelendiğinde cache'de tutulması için useMemo kullanılır ve maliyeti önler
+    if (!rackData) return [];  // henüz db'den cevap gelmediyse boş döner. çökmez.
+    if (filterStatus === 'ALL') return Object.entries(rackData);  // eğer filtre tüm odalar ise eleme yapılmaz. Liste yapısını ARRAY'e dönüştürür. 
+
+    const filtered = {}; // filtreden geçen odaları toplayacağımız boş sepet.
+    Object.entries(rackData).forEach(([floor, rooms]) => { // rackData array'e dönüştürülüp forEach ile döngüye sokulur. Döngünün her adımınında fonksiyon çalışır.
+      const matchingRooms = rooms.filter(r => r.status === filterStatus); // filterStatus state'ine göre döngüde yazdırılacaklar filtrelenir.
+      if (matchingRooms.length > 0) filtered[floor] = matchingRooms; // eğer filtreden sonra eşleşen oda varsa -> filtered listesinin içine ekler.
+    });
+    return Object.entries(filtered); // array halinde filtrelenmiş oda listesini döner.
+  }, [rackData, filterStatus]); // bu değerler değiştiğinde döngüyü çalıştır.
+
+  if (isLoading) { // eğer isLoading true ise yükleniliyor... yazısı yazılır.
     return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      <div className="flex h-[60vh] flex-col items-center justify-center text-blue-600">
+        <Loader2 className="h-10 w-10 animate-spin mb-4" />
+        <span className="text-sm font-bold tracking-wider uppercase text-slate-500">Kat Planı Yükleniyor...</span>
       </div>
     );
   }
 
   if (isError) {
-    return <div className="text-red-500 p-4 bg-red-50 rounded-lg">Veri çekilemedi: {error.message}</div>;
+    return (
+      <div className="flex items-center gap-3 p-5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700">
+        <AlertCircle size={24} className="shrink-0" />
+        <div>
+          <p className="font-bold">Oda planı verisi alınamadı</p>
+          <p className="text-sm mt-1">{error?.response?.data?.detail || error.message}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold text-slate-800">Oda Planı (Room Rack)</h2>
-        {/* Arka planda 1 dakikalık sessiz güncelleme olurken ufak bir ibare gösterelim */}
-        {isFetching && <span className="text-xs text-blue-500 font-semibold animate-pulse">Güncelleniyor...</span>}
+    <div className="space-y-6 pb-12">
+
+      {/* Üst Bar & Filtreler */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <div>
+          <h2 className="">Oda Planı (Room Rack)</h2>
+          <p className="text-xs text-slate-500 mt-0.5">Kat bazlı interaktif oda ve misafir durumu</p>
+        </div>
+
+        {/* her statü için ekrana birer filtre butonu basar. */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Filter size={16} className="text-slate-400 mx-2" /> 
+          {Object.entries(STATUS_CONFIG).map(([key, config]) => (
+            <button
+            key={key}
+            onClick={() => setFilterStatus(key)}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all curser-pointer ${
+              filterStatus === key
+              ? `${config.badge} shadow-md scale-105`
+              : 'text-slate-600 bg-slate-50 border border-slate-200 hover:bg-slate-100'
+            }`}
+            >
+              {config.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {Object.entries(rackData).map(([floor, rooms]) => (
-        <div key={floor} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4">Kat {floor}</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
-            {rooms.map((room) => (
-              <div 
-                key={room.id} 
-                className={`p-4 rounded-lg border-2 ${
-                  room.status === 'VC' ? 'border-emerald-400 bg-emerald-50' :
-                  room.status === 'VD' ? 'border-red-400 bg-red-50' :
-                  room.status === 'OC' ? 'border-blue-400 bg-blue-50' :
-                  room.status === 'OD' ? 'border-orange-400 bg-orange-50' :
-                  'border-slate-300 bg-slate-100'
-                }`}
-              >
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-bold text-lg text-slate-800">{room.room_number}</span>
-                  <span className="text-xs font-bold px-2 py-1 rounded bg-white/60 text-slate-700 shadow-sm">
-                    {room.status}
-                  </span>
-                </div>
-                <div className="text-xs text-slate-600 font-medium mb-2">{room.room_type_code}</div>
-                
-                {room.active_reservation ? (
-                  <div className="mt-2 pt-2 border-t border-slate-200/50">
-                    <p className="text-sm font-semibold text-slate-800 truncate" title={room.active_reservation.guest_name}>
-                      {room.active_reservation.guest_name}
-                    </p>
-                    <p className="text-[10px] uppercase font-bold text-slate-500 mt-1">
-                      {room.active_reservation.status.replace('_', ' ')}
-                    </p>
+      {/* Grid Render */}
+      {filteredRack.length === 0 ? ( 
+        <div className="text-center p-16 bg-white rounded-2xl border border-slate-200 text-slate-400">
+          <BedDouble size={48} className="mx-auto mb-4 opacity-30" />
+          <p className="text-base font-semibold text-slate-600">Bu kriterlere uygun oda bulunamadı.</p>
+        </div> 
+      ) : ( 
+        filteredRack.map(([floor, rooms]) => (
+          <div key={floor} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs" >
+            <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-3">
+              Kat {floor}
+              <div className="h-px bg-slate-100 flex-1"></div>
+            </h3>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-3">
+              {rooms.map((room) => {
+                const config = STATUS_CONFIG[room.status] || STATUS_CONFIG.OOO;
+                const activeRes = room.relevant_reservations?.[0];
+
+                return (
+                  <div
+                  key={room.id}
+                  onClick={() => handleRoomClick(room)}
+                  className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer select-none group flex flex-col justify-between min-h-[110px] ${config.card}`}
+                  >
+                    <div>
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="font-black text-xl tracking-tighter">
+                          {room.room_number}
+                        </span>
+                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded shadow-sm ${config.badge}`}>
+                          {room.status}
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-bold opacity-60">
+                        {room.room_type_code}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 mt-2 border-t border-current/20">
+                      {activeRes ? (
+                        <div className="truncate">
+                          <p className="text-xs font-bold truncate" 
+                          title={`${activeRes.guest?.first_name} ${activeRes.guest?.last_name}`}
+                          >
+                            {activeRes.guest
+                            ? `${activeRes.guest.first_name} ${activeRes.guest.last_name}` 
+                            : activeRes.status.replace('_', ' ')}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-[11px] font-bold opacity-60 group-hover:opacity-100 transition-opacity">
+                          <Plus size={12} /> Rezervasyon
+                        </div>
+                      )}
+                    </div>
                   </div>
-                ) : (
-                  <div className="mt-2 pt-2 border-t border-slate-200/50">
-                    <p className="text-sm text-slate-400 italic">Boş</p>
-                  </div>
-                )}
-              </div>
-            ))}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        ))
+      )}
+
+      {/* Modallar */}
+      <RoomDetailModal 
+      isOpen={!!selectedDetailRoom}
+      onClose={() => setSelectedDetailRoom(null)}
+      room={selectedDetailRoom}
+      />
+
+      <NewReservationModal  
+      isOpen={!!selectedResRoomId}
+      onClose={() => setSelectedResRoomId(null)}
+      initialRoomId={selectedResRoomId}
+      />
     </div>
   );
 };
 
 export default RoomRack;
-
