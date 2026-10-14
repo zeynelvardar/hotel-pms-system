@@ -3,6 +3,7 @@ Rooms ve RoomType API uç noktaları için rol tabanlı yetkilendirme (RBAC),
 Room Rack (BFF) ve CRUD operasyonlarını doğrulayan entegrasyon testleri.
 """
 
+from django.utils import timezone
 from datetime import date
 from decimal import Decimal
 from typing import Any, cast
@@ -138,7 +139,7 @@ class RoomsApiTestCase(APITestCase):
 
     def test_room_rack_api_returns_grouped_data_without_n_plus_one(self) -> None:
         """Room Rack API'nin katlara göre gruplandığı ve max 2 SQL sorgusu attığı doğrulanır."""
-        today = date.today()
+        today = timezone.localdate()
         guest = Guest.objects.create(
             first_name="Rack",
             last_name="Tester",

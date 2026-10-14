@@ -1,4 +1,5 @@
-from datetime import date, timedelta
+from django.utils import timezone
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Callable
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
@@ -100,7 +101,7 @@ class Reservation(models.Model):
                         raise ValidationError("Check-out yapılmış veya iptal edilmiş rezervasyonlar salt okunurdur. Tarih veya statü değiştirilemez.")
 
                 if old_instance.status == ReservationStatus.RESERVED and self.status == ReservationStatus.IN_HOUSE:
-                    if date.today() < self.check_in_date:
+                    if timezone.localdate() < self.check_in_date:
                         raise ValidationError({"status": "Check-in tarihi gelmemiş bir rezervasyon 'IN_HOUSE' durumuna alınamaz."})
 
     def save(self, *args, **kwargs):

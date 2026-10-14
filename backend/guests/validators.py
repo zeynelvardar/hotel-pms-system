@@ -1,4 +1,5 @@
 from datetime import date
+from django.utils import timezone
 from django.core.exceptions import ValidationError
 
 def validate_tckn(value: str) -> None:
@@ -26,5 +27,5 @@ def validate_tckn(value: str) -> None:
 
 def validate_past_date(value: date) -> None:
     """Tarihin gelecekte olmamasını garanti eder."""
-    if value > date.today():
+    if value > timezone.localdate():
         raise ValidationError("Doğum tarihi veya geçmiş işlemler gelecekte bir tarih olamaz.")

@@ -1,3 +1,4 @@
+from django.utils import timezone
 from datetime import date, timedelta
 from typing import Any, cast
 from django.urls import reverse
@@ -40,7 +41,7 @@ class ReservationConcurrencyTests(TestCase):
             room_type=self.room_type,
             floor=1,
         )
-        self.today = date.today()
+        self.today = timezone.localdate()
 
     def test_overlapping_reservations_are_blocked(self) -> None:
         """Birbiriyle çakışan tarihlerdeki rezervasyonlar engellenmelidir."""
@@ -133,7 +134,7 @@ class ReservationDashBoardApiTests(APITestCase):
         )
         self.room_type = RoomType.objects.create(name="Std", code="STD", base_price=100)
         self.room = Room.objects.create(room_number="101", room_type=self.room_type, floor=1)
-        self.today = date.today()
+        self.today = timezone.localdate()
 
         # Operasyonel test kayıtları
         Reservation.objects.create(
@@ -197,7 +198,7 @@ class ReservationActionApiTests(APITestCase):
         )
         self.room_type = RoomType.objects.create(name="Suite", code="SUT", base_price=2000)
         self.room = Room.objects.create(room_number="201", room_type=self.room_type, floor=2)
-        self.today = date.today()
+        self.today = timezone.localdate()
 
         self.client.force_authenticate(user=self.receptionist)
 

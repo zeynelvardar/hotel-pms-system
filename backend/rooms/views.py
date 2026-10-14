@@ -1,3 +1,4 @@
+from django.utils import timezone
 from datetime import date
 from django.db.models import Count, Prefetch, Q
 from rest_framework import viewsets, status
@@ -69,7 +70,7 @@ class RoomViewSet(viewsets.ModelViewSet):
         Tüm otelin oda durumunu, içerideki misafirleri ve bugün gelecekleri
         N+1 sorgusu YAŞATMAYARAK katlara göre gruplanmış halde döndürür.
         """
-        today = date.today()
+        today = timezone.localdate()
 
         # 1. N+1 Kalkanı: Sadece ilgilendiğimiz rezervasyonları seçiyoruz. (Konaklayanlar VEYA Bugün gelecekler)
         relevant_reservations = Reservation.objects.filter(

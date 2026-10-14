@@ -1,4 +1,5 @@
-from datetime import date, timedelta
+from datetime import timedelta
+from django.utils import timezone
 from django.test import TestCase
 from django.core.exceptions import ValidationError
 from .models import Guest
@@ -6,8 +7,8 @@ from .models import Guest
 class GuestModelTests(TestCase):
     def setUp(self):
         self.valid_tckn = "10000000146" # Geçerli Mod10 üreten örnek bir test numarası
-        self.adult_dob = date.today() - timedelta(days=365 * 25) # 25 yaşında
-        self.child_dob = date.today() - timedelta(days=365 * 10) # 10 yaşında
+        self.adult_dob = timezone.localdate() - timedelta(days=365 * 25) # 25 yaşında
+        self.child_dob = timezone.localdate() - timedelta(days=365 * 10) # 10 yaşında
 
     def test_guest_must_have_tc_or_passport(self):
         guest = Guest(first_name="Test", last_name="User", birth_date=self.adult_dob)

@@ -1,4 +1,4 @@
-from datetime import date
+from django.utils import timezone
 from django.core.exceptions import ValidationError
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -34,7 +34,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
     # --- GET: Dashboard Uçları ---
     @action(detail=False, methods=["get"], url_path="dashboard/arrivals")
     def arrivals_today(self, request):
-        today = date.today()
+        today = timezone.localdate()
         qs = self.get_queryset().filter(check_in_date=today, status=ReservationStatus.RESERVED)
         page = self.paginate_queryset(qs)
         if page is not None:
@@ -43,7 +43,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="dashboard/departures")
     def departures_today(self, request):
-        today = date.today()
+        today = timezone.localdate()
         qs = self.get_queryset().filter(check_out_date=today, status=ReservationStatus.IN_HOUSE)
         page = self.paginate_queryset(qs)
         if page is not None:

@@ -3,7 +3,7 @@ Otel misafir profillerini, kimlik/pasaport doğrulama kurallarını
 ve yaş kontrollerini yöneten veri tabanı modelleridir.
 """
 
-from datetime import date
+from django.utils import timezone
 from django.db import models
 from django.core.exceptions import ValidationError
 from .validators import validate_tckn, validate_past_date
@@ -97,7 +97,7 @@ class Guest(models.Model):
 
         # 2. Yaş Kuralı: Ana misafir 18 yaşından küçük olamaz
         if self.is_main_guest and self.birth_date:
-            today = date.today()
+            today = timezone.localdate()
             age = (
                 today.year 
                 - self.birth_date.year 
