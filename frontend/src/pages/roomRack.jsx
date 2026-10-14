@@ -29,20 +29,8 @@ const RoomRack = () => {
 
   // İş Mantığı Yönlendiricisi
   const handleRoomClick = (room) => {
-    // 1. Kural: Dolu veya Hizmet Dışı (OOO) odalarda her zaman detay penceresi açılır.
-    const isOccupiedOrBlocked = ['OC', 'OD', 'OOO'].includes(room.status); // includes = içindeki değerlerden biri varsa true yoksa false döner. Operasyon kontrolü bu şekilde sağlanır.
-    
-    if (isOccupiedOrBlocked) {
-      setSelectedDetailRoom(room);
-      return;
-    }
-
-    // 2. Kural: Fiziksel olarak boş odalar (VC, VD).
-    // İster doğrudan rezervasyon açtır, ister üzerine aktif giriş bekleyen rezervasyon var ise detaya yönlendir:
-    setSelectedResRoomId(room.id);
-
-
-  }
+    setSelectedDetailRoom(room);
+  };
 
   // Frontend Filtreleme 
   const filteredRack = useMemo(() => { // rack verisi filtrelendiğinde cache'de tutulması için useMemo kullanılır ve maliyeti önler
@@ -149,18 +137,26 @@ const RoomRack = () => {
                     <div className="pt-2 mt-2 border-t border-current/20">
                       {activeRes ? (
                         <div className="truncate">
-                          <p className="text-xs font-bold truncate" 
-                          title={`${activeRes.guest?.first_name} ${activeRes.guest?.last_name}`}
+                          <p
+                          className="text-xs font-bold truncate"
+                          title={`${activeRes.guest?.first_name || ''} ${activeRes.guest?.last_name || ''}`}
                           >
                             {activeRes.guest
-                            ? `${activeRes.guest.first_name} ${activeRes.guest.last_name}` 
+                            ? `${activeRes.guest.first_name} ${activeRes.guest.last_name}`
                             : activeRes.status.replace('_', ' ')}
                           </p>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1 text-[11px] font-bold opacity-60 group-hover:opacity-100 transition-opacity">
+                        <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation; // Kartın tıklama olayının (RoomDetailModal) tetiklemesini engeller.
+                          setSelectedResRoomId(room.id) // Sadece rezervasyon modalını açar.
+                        }}
+                        className="flex items-center gap-1 text-[11px] font-bold opacity-75 hover:opacity-100 hover:scale-105 transition-all cursor-pointer py-0.5 px-1 rounded hover:bg-black/5"
+                        >
                           <Plus size={12} /> Rezervasyon
-                        </div>
+                        </button>
                       )}
                     </div>
                   </div>
