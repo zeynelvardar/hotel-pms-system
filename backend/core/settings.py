@@ -79,7 +79,7 @@ AUTH_PASSWORD_VALIDATORS = [
 AUTH_USER_MODEL = 'accounts.User'
 
 LANGUAGE_CODE = 'tr-tr'
-TIME_ZONE = 'Europe/Istanbul'
+TIME_ZONE = os.getenv("TIME_ZONE", "Europe/Istanbul")
 USE_I18N = True
 USE_TZ = True
 
