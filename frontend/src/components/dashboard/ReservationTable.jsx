@@ -7,6 +7,7 @@
  *
  */
 
+import { formatDate } from '../../utils/formatters';
 import { Calendar, BedDouble, User, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useReservationAction } from '../../hooks/useHotelData';
@@ -67,7 +68,7 @@ const ReservationTable = ({ data, type, isLoading }) => { // üst bileşenden ge
                                     <td className="py-3.5 px-5 text-slate-500 font-medium">
                                         <div className="flex items-center gap-1.5">
                                             <Calendar size={14} className="text-slate-700"/>
-                                            {item.check_in_date} &rarr; {item.check_out_date}
+                                            {formatDate(item.check_in_date)} &rarr; {formatDate(item.check_out_date)}
                                         </div>
                                     </td>
                                     <td className="py-3.5 px-5 font-bold text-slate-700">

@@ -6,6 +6,7 @@
 
 import { X, User, Calendar, BedDouble, Sparkles, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { useChangeRoomStatus } from '../../hooks/useHotelData';
+import { formatDate } from '../../utils/formatters';
 
 const RoomDetailModal = ({ isOpen, onClose, room }) => { //çağırıldığı zaman üst bileşenden içine gelen parametreler.
     const statusMutation = useChangeRoomStatus(); // çağırıldığında isteği useHotelData'dan atar.
@@ -53,7 +54,7 @@ const RoomDetailModal = ({ isOpen, onClose, room }) => { //çağırıldığı za
                                 </div>
                                 <div className="text-xs text-blue-700 font-medium flex items-center gap-1.5">
                                     <Calendar size={14} className="opacity-70" />
-                                    <span>{res.check_in_date} &rarr; {res.check_out_date}</span>
+                                    <span>{formatDate(res.check_in_date)} &rarr; {formatDate(res.check_out_date)}</span>
                                 </div>
                                 <div className="inline-block px-2.5 py-1 bg-white rounded shadow-xs text-[10px] font-bold text-blue-800 uppercase tracking-wide">
                                     {res.status.replace('-', ' ')}
