@@ -11,7 +11,7 @@ export const formatDate = (dateStr) => {
 export const getNextDay = (dateStr) => {
     if (!dateStr || typeof dateStr !== 'string') return '';
 
-    const parts = dateStr.split('-')
+    const parts = dateStr.split('-');
     if (parts.length !== 3) return '';
 
     const [year, month, day] = parts.map(Number);
@@ -35,14 +35,14 @@ export const maskDateInput = (value) => {
         return digits;
     }
     if (digits.length <= 4) {
-        return `${digits.slice(0, 2)}.${digits.slice(2)}`
+        return `${digits.slice(0, 2)}.${digits.slice(2)}`;
     }
     return `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
 };
 
 export const parseMaskedDateToISO = (maskedDate) => {
     if (!maskedDate || maskedDate.length !== 10) return null;
-    const [day, month, year] = maskedDate.split('.')
-    if (!day || !month || year.length !== 4) return null;
+    const [day, month, year] = maskedDate.split('.');
+    if (!day || !month || !year || year.length !== 4) return null;
     return `${year}-${month}-${day}`;
 };
