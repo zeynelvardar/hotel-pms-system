@@ -5,7 +5,7 @@
 import { useState, useMemo } from 'react';
 import { useRoomRack } from '../hooks/useHotelData';
 import RoomDetailModal from '../components/rack/RoomDetailModal';
-import NewReservationModal from '../components/dashboard/newReservationModal';
+import NewReservationModal from '../components/dashboard/NewReservationModal';
 import { Loader2, AlertCircle, BedDouble, Filter, Plus } from 'lucide-react';
 
 

@@ -52,11 +52,14 @@ export const useDashBoardInHouse = () => {
 };
 
 export const useAvailableRooms = (checkIn, checkOut) => { //dışarıdan 2 parametre alır.
+    // Giriş ve çıkış dolu olmalı VE çıkış tarihi girişten büyük olmalı.
+    const isDateRangeValid = Boolean(checkIn && checkOut && new Date(checkOut) > new Date(checkIn));
+    
     return useQuery({ // TanStack veri okuma motoru (useQuery) çalışır
         queryKey: ['availableRooms', checkIn, checkOut], // cache için kimlik anahtarı oluşur, içine cin-cout tarihlerini de koy.
         queryFn: () => hotelService.getAvailableRooms(checkIn, checkOut), // api'ye istek atan fonksiyon
         // Sadece her iki tarih de seçiliyse API'ye istek at (Gereksiz ağı yormaz)
-        enabled: !!checkIn && !!checkOut, // giriş çıkış tarihi doluysa isteği at. 
+        enabled: isDateRangeValid, // giriş çıkış tarihi doluysa isteği at. 
         staleTime: 1000 * 30, // 30 saniye boyunca önbellekte taze kalır.
     });
 };
