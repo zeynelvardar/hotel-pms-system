@@ -6,7 +6,7 @@
  * 
  */
 
-import { getNextDay } from '../../utils/formatters';
+import { getNextDay, maskDateInput, parseMaskedDateToISO } from '../../utils/formatters';
 import { useState, useEffect } from 'react';
 import { useAvailableRooms, useCreateReservation } from '../../hooks/useHotelData';
 import { validateTCKN, validatePassport } from '../../utils/validators';
@@ -94,6 +94,15 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => { // 
 
     if (!isOpen) return null; // dashboard bileşeninden gelen isOpen değerli false ise yani yeni rezervasyon butonuna basmamışsa, React bunları DOM'a çizmez.
 
+    // Doğum günü maskelemesi ve otomatik noktalama
+    const handleBirthDateChange = (e) => {
+        const maskedValue = maskDateInput(e.target.value);
+        setFormData((prev) => ({
+            ...prev,
+            birthDate: maskedValue,
+        }));
+    };
+    
     // formdaki input ve select alanlarını tek merkezden güncelleyen evrensel change handler.
     const handleChange = (e) => { // e : olay nesnesi (kullanıcı her tuşa bastığında seçim değiştiğinde tarayıcı bu fonksiyonu tetikler)
         const { name, value } = e.target;  // o en tetiklenen html etiketi
@@ -122,7 +131,7 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => { // 
                 last_name: formData.lastName,
                 tc_no: formData.identityType === 'tc' ? formData.identityNumber : null, // seçilen belge (identityType: tc) ise, tc yi yaz. passaportsa tc alanını boş bırak.
                 passport_no: formData.identityType === 'passport' ? formData.identityNumber : null,
-                birth_date: formData.birthDate,
+                birth_date: parseMaskedDateToISO(formData.birthDate),
             },
             room_id: formData.roomId,
             check_in_date: formData.checkIn,
@@ -184,7 +193,7 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => { // 
 
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-600 mb-1">Doğum Tarihi</label>
-                                    <input required type="date" name="birthDate" value={formData.birthDate} onChange={handleChange} max={today} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"/>
+                                    <input required type="text" name="birthDate" value={formData.birthDate} onChange={handleBirthDateChange} placeholder="GG.AA.YYYY" maxLength={10} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"/>
                                 </div>
                             </div>
                         </div>
