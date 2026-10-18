@@ -47,6 +47,13 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
     room_id = serializers.PrimaryKeyRelatedField(
         queryset=Room.objects.all(), source="room", required=False
     )
+    # total_price'ı opsiyonel yapıp varsayılan 0.00 yapıyoruz.
+    total_price = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        required=False,
+        default=0.00
+    )
 
     class Meta:
         model = Reservation

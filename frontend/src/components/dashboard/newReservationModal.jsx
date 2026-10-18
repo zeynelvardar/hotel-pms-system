@@ -127,7 +127,7 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => { // 
             room_id: formData.roomId,
             check_in_date: formData.checkIn,
             check_out_date: formData.checkOut,
-            total_price: formData.totalPrice || 0,
+            total_price: formData.totalPrice ? formData.totalPrice : '0.00',
             notes: formData.notes
         };
 
@@ -224,7 +224,7 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => { // 
 
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-600 mb-1">Toplam Tutar (TRY)</label>
-                                    <input required type="number" step="0.01" name="totalPrice" value={formData.totalPrice} onChange={handleChange} placeholder="Örn: 4500.00" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                                    <input type="number" step="0.01" name="totalPrice" value={formData.totalPrice} onChange={handleChange} placeholder="Örn: 4500.00" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-600 mb-1">Notlar</label>

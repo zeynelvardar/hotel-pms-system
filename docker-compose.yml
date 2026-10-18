@@ -7,8 +7,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      - TZ=${TIME_ZONE:-Europe/Istanbul}
-      - PGTZ=${TIME_ZONE:-Europe/Istanbul}
+      TZ: ${TIME_ZONE:-Europe/Istanbul}
+      PGTZ: ${TIME_ZONE:-Europe/Istanbul}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -20,7 +20,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    
 
   backend:
     build:
@@ -40,9 +39,8 @@ services:
         condition: service_healthy
     networks:
       - pms_network
-    enviroment:
-    - TZ=${TIME_ZONE: -Europe/Istanbul}
-
+    environment:
+      TZ: ${TIME_ZONE:-Europe/Istanbul}
 
   frontend:
     build:

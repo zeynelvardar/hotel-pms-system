@@ -41,7 +41,7 @@ class Reservation(models.Model):
     )
 
     total_price = models.DecimalField(
-        max_digits=10, decimal_places=2, validators=[MinValueValidator(0)], verbose_name="Toplam Fiyat"
+        max_digits=10, decimal_places=2, default=0.00, blank=True, validators=[MinValueValidator(0)], verbose_name="Toplam Fiyat"
     )
     notes = models.TextField(blank=True, null=True, verbose_name="Notlar")
 
