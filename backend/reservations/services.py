@@ -1,7 +1,11 @@
+# Rezervasyon Durum Değişikliklerini Yönetir (CI-CO) 
+# Bu değişikliklerin RoomRack'e yansımasını yönetir.
+
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from rooms.models import RoomStatus
-from .models import Reservation, ReservationStatus
+from .models import Reservation, ReservationStatus, HotelSettings
+from datetime import timedelta
 
 class ReservationActionService:
     """
@@ -44,3 +48,35 @@ class ReservationActionService:
             room.save(update_fields=["status", "updated_at"])
 
         return reservation
+
+class NightAuditService:
+    @staticmethod # fonksiyonun sınıftan bağımsız metod gibi davranmasını sağlar. 
+    @transaction.atomic
+    def execute_end_of_day():
+        """
+        Night Audit tarafından tetiklenen Gün Sonu İşlemi.
+        1. Tarihi geçmiş ve giriş yapmamış (RESERVED) kayıtları NO_SHOW yapar.
+        2. Sistem gününü 1 gün ileri alır.
+        Transaction ile korunur; hata olursa sistem günü değişmez.
+        """
+
+        settings, _ = HotelSettings.objects.get_or_create(pk=1) #ayarlar modelimiz.
+        current_date = settings.system_date
+
+        # 1. No-Show'ları yakala veya işaretle
+        ghost_reservations = Reservation.objects.filter( #veritabanı filtrelemesi.
+            status=ReservationStatus.RESERVED,
+            check_in_date__lt=current_date # bugünün tarihi
+        )
+
+        # Tek bir SQL Update sorgusuyla toplu güncelleme (Performans / Clean Code)
+        ghost_reservations.update(status=ReservationStatus.NO_SHOW)
+
+        # 2. Sistem Gününü İleri Al
+        settings.system_date = current_date + timedelta(days=1)
+        settings.save()
+
+        return {
+            "new_system_date": settings.system_date,
+            "no_shows_processed": ghost_reservations.count()
+        }

@@ -111,3 +111,36 @@ class Reservation(models.Model):
                 Room.objects.select_for_update().get(pk=self.room_id)
             self.full_clean()
             super().save(*args, **kwargs)
+
+
+
+class HotelSettings(models.Model):
+    """
+    Otel PMS Sisteminin kalbi, Gerçek zamanı değil, otelin 'Operasyonel Gününü'
+    tutar. Singleton pattern ile tasarlandı; veritabanında her zaman tek bir satır (id=1) olur.
+    """
+    system_date = models.DateField(
+        default=timezone.localdate,
+        verbose_name="Sistem (Operasyon) Günü"
+    )
+    last_night_audit = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Son Gün Sonu İşlemi"
+    )
+
+    class Meta:
+        verbose_name = "Otel Ayarı"
+        verbose_name_plural = "Otel Ayarları"
+
+    def save(self, *args, **kwargs):
+        # Singleton Patters: Yeni kayıt oluşturulmasını engelle, hep id=1'i güncelle.
+        self.pk = 1
+        super(HotelSettings, self).save(*args, **kwargs)
+
+    @classmethod
+    def get_current_date(cls) -> timezone.datetime.date:
+        """Sistem gününü güvenli şekilde okuyan yarımcı metod."""
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj.system_date
+
+    
