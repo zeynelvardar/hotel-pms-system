@@ -1,3 +1,9 @@
+"""
+Çekilen veriyi sayfalar, tek seferde 50.000 kayıt
+yerine 100 tane getirerek ihtiyaç oldukça devamı açılır.
+
+"""
+
 from rest_framework.pagination import PageNumberPagination
 
 class StandardResultsSetPagination(PageNumberPagination):
