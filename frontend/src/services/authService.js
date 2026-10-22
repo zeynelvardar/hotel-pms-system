@@ -1,4 +1,6 @@
 /**
+ * Login İşlemini Yönetir (Login.jsx'deki formlardan veri buraya gelir.)
+ * 
  * authService.js Kimlik doğrulama (authentication) işlemlerini tek bir
  * merkezde yöneten Service katmanı modülüdür.
  * 

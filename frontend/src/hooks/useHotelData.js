@@ -15,68 +15,79 @@
  * günceller.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; //veri okuma (GET isteği)
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { hotelService } from '../services/hotelService';
-import toast from 'react-hot-toast'
+import toast from 'react-hot-toast';
 
+// ==========================================
+// 1. ODA & RACK HOOK'LARI
+// ==========================================
 
-// Room Rack verisini çeken ve arka planda güncelleyen hook
 export const useRoomRack = () => {
-    return useQuery({
-        queryKey: ['roomRack'], // benzersiz ön bellek anahtarı.
-        queryFn: hotelService.getRoomRack, // query fonksiyonu: hotelService içindeki endpoint'e gider.
-        refetchInterval: 1000 * 60, // 6 saniyede bir rack ekranını günceller.
+    return useQuery({ // useQuery: GET isteklerini atar, veriyi ön belleğe alır, 60 saniyede bir yeniden istek atar.
+        queryKey: ['roomRack'], // tarayıcı için query anahtarı.
+        queryFn: hotelService.getRoomRack, // istek atılır.
+        refetchInterval: 1000 * 60, // 60 saniyede bir tekrar istek atar ve yeniler.
     });
 };
 
-// Dashboard panoları için hook'lar
-export const useDashBoardArrivals = () => {
+export const useAvailableRooms = (checkIn, checkOut) => { // react bileşenin'den giriş ve çıkış tarihi paramtere olarak verilir.
+    const isDateRangeValid = Boolean(checkIn && checkOut && new Date(checkOut) > new Date(checkIn)); // giriş ve çıkış tarihi dolu mu (true/false) -> string olarak gelen tarihleri JS tarih nesnesine çevirir ve kıyaslar (çıkış girişten büyük mü?) true/false döner.
+
     return useQuery({
-        queryKey: ['dashboard', 'arrivals'], // önbellek anahtarları
-        queryFn: hotelService.getArrivals, // hotelService içindeki endpoint'e gider.
+        queryKey: ['availableRooms', checkIn, checkOut], // queryKey içine giriş ve çıkış tarihi koyuyoruz: react bileşeninde giriş çıkış tarihi değiştiğinde cache'de anlık güncellenmesi için.
+        queryFn: () => hotelService.getAvailableRooms(checkIn, checkOut),
+        enabled: isDateRangeValid, // tarih validasyonu true ise istek atılır.
+        staleTime: 1000 * 30, // 30 saniye boyunca taze kalır, tekrar istek atılıp güncellenmesi için etkileşim gerekir. (tekrar tarih seçme vs.)
     });
 };
 
-export const useDashBoardDepartures = () => {
-    return useQuery({
-        queryKey: ['dashboard', 'departures'], // ön bellek anahtarları
-        queryFn: hotelService.getDepartures, // hotelService içindeki endpoint'e gider.
-    });
-};
-
-export const useDashBoardInHouse = () => {
-    return useQuery({
-        queryKey: ['dashboard', 'inHouse'], // ön bellek anahtarları
-        queryFn: hotelService.getInHouse,
-    });
-};
-
-export const useAvailableRooms = (checkIn, checkOut) => { //dışarıdan 2 parametre alır.
-    // Giriş ve çıkış dolu olmalı VE çıkış tarihi girişten büyük olmalı.
-    const isDateRangeValid = Boolean(checkIn && checkOut && new Date(checkOut) > new Date(checkIn));
+export const useChangeRoomStatus = () => {
+    const queryClient = useQueryClient(); // Ön Bellek Yöneticisi: sunucuda veri değiştiğinde, cache'deki eski verileri geçersiz kılmayı sağlar, böylece veriler güncellenir.
     
-    return useQuery({ // TanStack veri okuma motoru (useQuery) çalışır
-        queryKey: ['availableRooms', checkIn, checkOut], // cache için kimlik anahtarı oluşur, içine cin-cout tarihlerini de koy.
-        queryFn: () => hotelService.getAvailableRooms(checkIn, checkOut), // api'ye istek atan fonksiyon
-        // Sadece her iki tarih de seçiliyse API'ye istek at (Gereksiz ağı yormaz)
-        enabled: isDateRangeValid, // giriş çıkış tarihi doluysa isteği at. 
-        staleTime: 1000 * 30, // 30 saniye boyunca önbellekte taze kalır.
+    return useMutation({
+        mutationFn: ({roomId, status}) => hotelService.changeRoomStatus(roomId, status), // patch isteği atılır, roomId ve status parametre olarak hotelService.js üzerinden backend'e istek atılır.
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['roomRack'] }); // oda statüsü değiştiği için roomRack queryKey'ini stale bayat hale getirir ve tekrar istek atılarak arayüz güncellenir.
+            toast.success('Oda statüsü başarıyla güncellendi.');
+        },
+        onError: (error) => {
+            toast.error(error.response?.data?.detail || 'Oda statüsü güncellenemedi.')
+        }
     });
 };
 
-export const useCreateReservation = (onSuccessCallback) => { //parametre 
-    const queryClient = useQueryClient(); //tansquery'nin hafıza merkezine bağlanır, yeni rez oluştuğunda cache'deki verileri silip tazelemek için kullanacağız.
 
-    return useMutation({ // veri yazma motoru (çağırıldığı yere döner.)
-        mutationFn: hotelService.createReservation, // kaydet butonuna basıldığında DJANGO API'sine iletecek servis fonksiyonu.
-        onSuccess: () => {  // backend'e veri başarıyla yazıldığında bu fonksiyon çalışır.
-            // başarılı kayıtta tüm panoları ve Room Rack'i anında tazele!
-            queryClient.invalidateQueries({ queryKey: ['dashboard'] }); // dashboard cache'ini bayat olarak işaretler.
-            queryClient.invalidateQueries({ queryKey: ['roomRack'] }); // aynı şekilde room rack cache'ini de bayatlatır.
-            toast.success('Rezervasyon başarıyla oluşturuldu!');
-            if (onSuccessCallback) onSuccessCallback(); // dışarıdan parametre olarak bir fonksiyon gelmişse, rezervasyon kaydı başarıyla tamamlandığında onu çalıştırır.
+// ==========================================
+// 2. DASHBOARD (OPERASYON PANOSU) HOOK'LARI
+// ==========================================
+// Hepsinde ortak 'dashboard' anahtarı (Query Key) kullanılarak cache izolasyonu sağlanır.
+
+export const useDashboardReservations = () => useQuery({ queryKey: ['dashboard', 'reservations'], queryFn: hotelService.getReservationsList }); // tüm rezervasyonlar listesini getiren hook (cache'leme yapar.)
+export const useDashboardArrivals = () => useQuery({ queryKey: ['dashboard', 'arrivals'], queryFn: hotelService.getArrivals });
+export const useDashboardArrivedToday = () => useQuery({ queryKey: ['dashboard', 'arrivedToday'], queryFn: hotelService.getArrived });
+export const useDashboardInHouse = () => useQuery({ queryKey: ['dashboard', 'inHouse'], queryFn: hotelService.getInHouse });
+export const useDashboardDepartures = () => useQuery({ queryKey: ['dashboard', 'departures'], queryFn: hotelService.getDepartures });
+export const useDashboardCheckedOut = () => useQuery({ queryKey: ['dashboard', 'checkedOut'], queryFn: hotelService.getCheckedOut });
+export const useDashboardCancelled = () => useQuery({ queryKey: ['dashboard', 'cancelled'], queryFn: hotelService.getCancelled });
+export const useDashboardAllRecords = () => useQuery({ queryKey: ['dashboard', 'allRecords'], queryFn: hotelService.getAllRecords });
+
+// ==========================================
+// 3. REZERVASYON AKSİYON HOOK'LARI (Yazma/Değiştirme)
+// ==========================================
+
+export const useCreateReservation = (onSuccessCallBack) => { // parametre react bileşeninden verilir, kalan işleri yaptırmaya yarar (onClose) gibi.
+    const queryClient = useQueryClient(); // Ön Bellek Yöneticisi: sunucuda veri değiştiğinde, cache'deki eski verileri geçersiz kılmayı sağlar, böylece veriler güncellenir.
+
+    return useMutation({
+        mutationFn: hotelService.createReservation, // post isteği atılır.
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['roomRack'] });
+            toast.success('Rezervasyon başarıyla oluşturuldu.');
+            if (onSuccessCallBack) onSuccessCallBack(); // callback true ise callback'i çalıştı (onclose) modal'ı kapat. (neden burada?: eğer modal direkt kapanırsa ve işlem başarısız olursa kullanıcı bunu göremez.)
         },
-        onError: (error) =>  {
+        onError: (error) => {
             const errorMsg = error.response?.data?.detail || error.response?.data?.non_field_errors?.[0] || 'Kayıt sırasında bir hata oluştu.';
             toast.error(`Kayıt Başarısız: ${errorMsg}`);
         }
@@ -84,37 +95,33 @@ export const useCreateReservation = (onSuccessCallback) => { //parametre
 };
 
 export const useReservationAction = () => {
-    const queryClient = useQueryClient(); // TSQuery'nin hafıza merkezine bağlanır ci/co yapıldığında veriyi tazeler.
+    const queryClient = useQueryClient(); // Ön Bellek Yöneticisi: sunucuda veri değiştiğinde, cache'deki eski verileri geçersiz kılmayı sağlar, böylece veriler güncellenir.
 
-    const checkInMutation = useMutation({
+    const checkInMutation = useMutation({ // patch isteği atılır.
         mutationFn: (id) => hotelService.checkInReservation(id),
         onSuccess: () => {
-            // Hem panoyu hem de oda durumunu (OC) aynı anda tazele.
             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             queryClient.invalidateQueries({ queryKey: ['roomRack'] });
-            toast.success('Misafir girişi (Check-in) başarıyla tamamlandı!');
+            toast.success('Misafir girişi (Chech-in) başarıyla tamamlandı!');
         },
         onError: (error) => {
-            const msg = error.response?.data?.detail || 'Check-in işlemi gerçekleştirilemedi.';
-            toast.error(msg);
+            toast.error(error.response?.data?.detail || 'Check-in işlemi gerçekleştirilemedi.')
         }
     });
 
     const checkOutMutation = useMutation({
         mutationFn: (id) => hotelService.checkOutReservation(id),
         onSuccess: () => {
-            // Hem panoyu hem de oda durumunu (VD) aynı anda tazele.
             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             queryClient.invalidateQueries({ queryKey: ['roomRack'] });
             toast.success('Misafirin çıkışı (Check-Out) başarıyla tamamlandı!');
         },
         onError: (error) => {
-            const msg = error.response?.data?.detail || 'Check-out işlemi gerçekleştirilemedi.';
-            toast.error(msg);
+            toast.error(error.response?.data?.detail || 'Check-out işlemi gerçekleştirilemedi.');
         }
     });
 
-    return {
+    return { // react bileşeni içinde işlemleri bu isimlemelerle çağıracağız. (karışıklık olmaması için.)
         checkIn: checkInMutation.mutate,
         isCheckingIn: checkInMutation.isPending,
         checkOut: checkOutMutation.mutate,
@@ -122,18 +129,29 @@ export const useReservationAction = () => {
     };
 };
 
-export const useChangeRoomStatus = () => { // oda temizlik ve doluluk statülerini (CLEAN-DIRTY-OOO etc.) değiştiren hook.
-    const queryClient = useQueryClient();  // TS query'nin ön bellek yöneticisine erişim sağlar. İşlem bittiğinde hafızadaki verileri geçersiz kılmak için hazırda tutar.
 
-    return useMutation({ // sunucudaki veriyi değiştiren http isteklerini yönetir.
-        mutationFn: ({ roomId, status }) => hotelService.changeRoomStatus(roomId, status), // api bileşenine istek atar.
-        onSuccess: () => {
-            // Değişiklik anında Room Rack'i tazele.
+// ==========================================
+// 4. SİSTEM GÜNÜ & NIGHT AUDIT HOOK'U
+// ==========================================
+
+export const useNightAudit = () => {
+    const queryClient = useQueryClient(); // Ön Bellek Yöneticisi: sunucuda veri değiştiğinde, cache'deki eski verileri geçersiz kılmayı sağlar, böylece veriler güncellenir.
+
+    return useMutation({
+        mutationFn: hotelService.triggerNightAudit,
+        onSuccess: (data) => { // data Api içindeki axios'dan gelir. ondan önce de backend'den.
+            // Gün sonu yapıldığında TÜM veriler (tarih ve durumlar) değiştiği için tüm cache'i tazele.
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             queryClient.invalidateQueries({ queryKey: ['roomRack'] });
-            toast.success('Oda statüsü başarıyla güncellendi.');
+
+            toast.success(
+                `Gün Sonu Başarılı! Yeni Sistem Günü: ${new Date(data.new_system_date).toLocaleDateString('tr-TR')}
+                \n(${data.no_shows_processed} adet gelmeyen misafir No-Show yapıldı.)`,
+                { duration: 5000 }
+            );
         },
         onError: (error) => {
-            toast.error(error.response?.data?.detail || 'Oda statüsü güncellenemedi.');
+            toast.error(error.response?.data?.detail || 'Gün sonu işlemi (Night Audit) başlatılamadı.');
         }
     });
 };
