@@ -165,3 +165,8 @@ class ReservationViewSet(viewsets.ModelViewSet): # ModelViewSet sınıfının ö
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, pk=None):
         return self._execute_service_action(pk, ReservationStatus.RESERVED, ReservationStatus.CANCELLED)
+
+    @action(detail=False, methods=["get"], url_path="system-date")
+    def get_system_date(self, request):
+        """Frontend'in otelin operasyonel gününü tek merkezden öğrenmesini sağlar."""
+        return Response({"system_date": HotelSettings.get_current_date()})

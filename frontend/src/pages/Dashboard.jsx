@@ -13,12 +13,13 @@ import ReservationTable from '../components/dashboard/ReservationTable';
 import { 
   useDashboardReservations, useDashboardArrivals, useDashboardArrivedToday,
   useDashboardInHouse, useDashboardDepartures, useDashboardCheckedOut,
-  useDashboardCancelled, useDashboardAllRecords, useNightAudit
+  useDashboardCancelled, useDashboardAllRecords, useNightAudit, useSystemDate
 } from '../hooks/useHotelData';
 import {
   LogIn, LogOut, Users, RefreshCw, Plus, CalendarDays,
-  History, Ban, Database, CheckSquare, MoonStar
+  Calendar, History, Ban, Database, CheckSquare, MoonStar
 } from 'lucide-react';
+import { formatDate } from '../utils/formatters';
 
 
 
@@ -29,6 +30,7 @@ const Dashboard = () => {
   // buradaki state yönetimi mimarisi: aşağıda setActiveTab kullanıldığında ve parametre olarak tab.id verildiğinde setActiveTab içindeki fonksiyon bu değeri activeTab'e yazar ve useState ekranı günceller.
   const [activeTab, setActiveTab] = useState('arrivals'); // kullanıcının şu an hangi sekmeye tıkladığını ve ekranda hangi listeyi gördüğünü takip eder. default: arrivals.
   const [isModalOpen, setIsModalOpen] = useState(false); // dashboard'un default olacak kapalı olacağı yani ekrana basılmayacağı ayarlanır. isModelOpen: modal açık mı kapalı mı onun verisini tutar / setIsModalOpen: bunu değiştiren özel bir fonksiyontur. true/false.
+  const { data: systemDate, isLoading, isDateLoading } = useSystemDate(); // useSystemDate() custom hook'unu ihtiyaç olan verilere göre getirir.
 
   // ==========================================
   // 3. SUNUCU VERİLERİ (TANSTACK QUERY HOOKS)

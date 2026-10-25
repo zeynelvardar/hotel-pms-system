@@ -134,6 +134,14 @@ export const useReservationAction = () => {
 // 4. SİSTEM GÜNÜ & NIGHT AUDIT HOOK'U
 // ==========================================
 
+export const useSystemDate = () => {
+    return useQuery({
+        queryKey: ['systemDate'],
+        queryFn: hotelService.getSystemDate,
+        staleTime: 1000 * 60 * 5, // 5 dk taze kalır
+    });
+};
+
 export const useNightAudit = () => {
     const queryClient = useQueryClient(); // Ön Bellek Yöneticisi: sunucuda veri değiştiğinde, cache'deki eski verileri geçersiz kılmayı sağlar, böylece veriler güncellenir.
 
@@ -143,6 +151,7 @@ export const useNightAudit = () => {
             // Gün sonu yapıldığında TÜM veriler (tarih ve durumlar) değiştiği için tüm cache'i tazele.
             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             queryClient.invalidateQueries({ queryKey: ['roomRack'] });
+            queryClient.invalidateQueries({ queryKey: ['systemDate'] });
 
             toast.success(
                 `Gün Sonu Başarılı! Yeni Sistem Günü: ${new Date(data.new_system_date).toLocaleDateString('tr-TR')}

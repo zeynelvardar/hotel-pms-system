@@ -69,6 +69,12 @@ export const hotelService = { // büyük bir nesne
     // ==========================================
     // 4. OTEL SİSTEM AKSİYONLARI
     // ==========================================
+    getSystemDate: async () => {
+        const response = await api.get('reservations/system-date/');
+        return response.data.system_date;
+    },
+
+
     triggerNightAudit: async () => {
         const response = await api.post(`reservations/night-audit/`);
         return response.data;
