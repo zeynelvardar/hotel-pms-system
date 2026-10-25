@@ -102,6 +102,16 @@ const Dashboard = () => {
         </div>
       
         <div className="flex flex-wrap items-center gap-3">
+          
+          {/* Otel Operasyon Sistem Günü Rozeti */}
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold shadow-inner">
+            <Calendar size={15} className="text-blue-600" />
+            <span className="text-slate-500">Sistem Günü:</span>
+            <span className="font-bold text-slate-900">
+              {isDateLoading ? 'Yükleniyor...' : (systemDate ? formatDate(systemDate) : 'Belirsiz')}
+            </span>
+          </div>
+
           <button
             onClick={handleNightAudit}
             disabled={isAuditPending}
