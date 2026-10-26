@@ -46,7 +46,8 @@ const ReservationTable = ({ data, type, isLoading }) => {
     // Tablonun "Aksiyon" sütununu gereksiz if/else kalabalığından kurtarır
     const renderActionButtons = (item) => { // Renderlamada butonlara yardımcı olan fonkisyon. (arayüzdeki data.map(item) değişkeninden gelir.)
         // Karşılaştırma doğrudan otelin sistem günü üzerinden yapılır.
-        const isFutureArrival = item.check_in_date > activeDate;
+        const isFutureArrival = item.check_in_date > activeDate; // giriş tarihi gelecekteyse true döner
+        const isFutureDeparture = item.check_out_date > activeDate; // çıkış tarihi gelecekteyse true döner
 
         // Kural 1: CHECK-IN BUTONU (Sadece bekleyenlere ve tarihi gelmiş olanlarla)
         if (item.status === 'RESERVED') {
@@ -69,7 +70,10 @@ const ReservationTable = ({ data, type, isLoading }) => {
             return (
                 <button
                     onClick={() => checkOut(item.id)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 text-white text-xs font-semibold transition cursor-pointer"
+                    disabled={isCheckingOut || isFutureDeparture}
+                    title={isFutureDeparture ? `Çıkış tarihi (${formatDate(item.check_out_date)}) henüz gelmedi!` : ''}
+                    className={`inline-flex items-center gap-1.4 px-3 py-1.5 rounded-lg text-white text-xs font-semibold transition curser-pointer
+                        ${isFutureDeparture ? 'bg-slate-400 cursor-not-allowed' : 'bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300'}`} 
                 >
                     {isCheckingOut && <Loader2 size={12} className="animate-spin" />}
                     Check-out Yap

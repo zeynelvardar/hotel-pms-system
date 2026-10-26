@@ -112,9 +112,15 @@ class Reservation(models.Model):
                     if (self.status != old_instance.status or self.check_in_date != old_instance.check_in_date or self.check_out_date != old_instance.check_out_date):
                         raise ValidationError("Check-out yapılmış veya iptal edilmiş rezervasyonlar salt okunurdur. Tarih veya statü değiştirilemez.")
 
+                # Kural: Giriş tarihi gelmemişse Check-in yapılamaz.
                 if old_instance.status == ReservationStatus.RESERVED and self.status == ReservationStatus.IN_HOUSE:
                     if HotelSettings.get_current_date() < self.check_in_date:
                         raise ValidationError({"status": "Check-in tarihi gelmemiş bir rezervasyon 'IN_HOUSE' durumuna alınamaz."})
+
+                # Kural: Çıkış tarihi gelmemişse Check-out yapılamaz.
+                if old_instance.status == ReservationStatus.IN_HOUSE and self.status == ReservationStatus.CHECKED_OUT:
+                    if HotelSettings.get_current_date() < self.check_out_date:
+                        raise ValidationError({"status": "Çıkış tarihi gelmemiş bir rezervasyon 'CHECKED-OUT' durumuna alınamaz. Erken çıkış işlemi için önce çıkış tarihini güncelleyin."})
 
     def save(self, *args, **kwargs):
         # Transaction başlatılır. select_for_update() bu işlemi atomik hale getirerek Race Condition'ı imkansız kılar.
