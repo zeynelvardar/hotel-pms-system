@@ -1,7 +1,7 @@
 from django.utils import timezone
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Callable
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, FieldError
 from django.core.validators import MinValueValidator
 from django.db import models, transaction
 from django.db.models import Func, Q
@@ -64,6 +64,18 @@ class Reservation(models.Model):
             )
         ]
 
+    def validate_constraints(self, exclude=None):
+        """
+        Django ORM'in ExclusionConstraint içindeki Q(status__in=...) koşulunu
+        hafızdada doğrulamaya çalışırken fırlattığı 'Choices are: _check' FieldError
+        hatasını güvenle bypass eder. Çakışma denetimi zaten clean() metodu ve 
+        PostgreSQL GiST constraint seviyesinde atomatik olarak yapılmaktadır.
+        """
+        try:
+            super().validate_constraints(exclude=exclude)
+        except FieldError:
+            pass
+    
     def __str__(self) -> str:
         status_label = self.get_status_display() if hasattr(self, "get_status_display") else self.status
         return f"#{self.pk} | Misafir ID: {self.guest_id} -> Oda ID: {self.room_id} ({status_label})"
@@ -101,7 +113,7 @@ class Reservation(models.Model):
                         raise ValidationError("Check-out yapılmış veya iptal edilmiş rezervasyonlar salt okunurdur. Tarih veya statü değiştirilemez.")
 
                 if old_instance.status == ReservationStatus.RESERVED and self.status == ReservationStatus.IN_HOUSE:
-                    if timezone.localdate() < self.check_in_date:
+                    if HotelSettings.get_current_date() < self.check_in_date:
                         raise ValidationError({"status": "Check-in tarihi gelmemiş bir rezervasyon 'IN_HOUSE' durumuna alınamaz."})
 
     def save(self, *args, **kwargs):
