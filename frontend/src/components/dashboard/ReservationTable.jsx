@@ -9,22 +9,24 @@
 // ==========================================
 import { formatDate } from '../../utils/formatters';
 import { Calendar, BedDouble, User, Loader2 } from 'lucide-react';
-import { useReservationAction } from '../../hooks/useHotelData';
+import { useReservationAction, useSystemDate } from '../../hooks/useHotelData';
 
 const ReservationTable = ({ data, type, isLoading }) => {
     // ==========================================
     // 2. KANCALAR (HOOKS)
     // ==========================================
     const { checkIn, isCheckingIn, checkOut, isCheckingOut } = useReservationAction(); // check-in ve check-out işlemlerini yapan useReservationAction() hook'unu çağırıyoruz.
+    const { data: systemDate, isLoading: isDateLoading } = useSystemDate(); // 
+    const activeDate = systemDate;
 
     // ==========================================
     // 3. YÜKLENİYOR VE BOŞ DURUMLARI (EARLY RETURNS)
     // ==========================================
-    if (isLoading) {
+    if (isLoading || isDateLoading || !activeDate) {
         return (
             <div className="flex flex-col items-center justify-center p-12 text-slate-500 bg-white rounded-xl border border-slate-200">
                 <div className="w-8 h-8 border-2 border-slate-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-                <span className="text-sm font-medium">Kayıtlar Yükleniyor...</span>
+                <span className="text-sm font-medium">Otel Operasyon Günü ve Kayıtlar Yükleniyor...</span>
             </div>
         );
     }
@@ -43,8 +45,8 @@ const ReservationTable = ({ data, type, isLoading }) => {
     // ==========================================
     // Tablonun "Aksiyon" sütununu gereksiz if/else kalabalığından kurtarır
     const renderActionButtons = (item) => { // Renderlamada butonlara yardımcı olan fonkisyon. (arayüzdeki data.map(item) değişkeninden gelir.)
-        const todayStr = new Date().toLocaleDateString('en-CA'); // bugünün tarihini alır. 
-        const isFutureArrival = item.check_in_date > todayStr; // giriş tarihi bugün olmayan misafirlerin check'in butonunu deaktif etmek için kullanılır.
+        // Karşılaştırma doğrudan otelin sistem günü üzerinden yapılır.
+        const isFutureArrival = item.check_in_date > activeDate;
 
         // Kural 1: CHECK-IN BUTONU (Sadece bekleyenlere ve tarihi gelmiş olanlarla)
         if (item.status === 'RESERVED') {
@@ -52,7 +54,7 @@ const ReservationTable = ({ data, type, isLoading }) => {
                 <button
                     onClick={() => checkIn(item.id)} // useReservationAction'dan gelen checkIn yapma butonu
                     disabled={isCheckingIn || isFutureArrival} // checkin'e alma işlemi gerçekleşiyorsa veya giriş tarihi gelecekteyse butonu devre dışı bırakır.
-                    title={isFutureArrival ? "Giriş tarihi henüz gelmedi!" : ""} // fare butonun üzerine geldiğinde giriş tarihi henüz gelmedi yazar.
+                    title={isFutureArrival ? `Giriş tarihi (${formatDate(item.check_in_date)}) henüz gelmedi!` : ""} // fare butonun üzerine geldiğinde giriş tarihi henüz gelmedi yazar.
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-semibold transition cursor-pointer
                         ${isFutureArrival ? 'bg-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300'}`}
                 >
