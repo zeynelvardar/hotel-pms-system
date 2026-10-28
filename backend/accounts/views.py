@@ -1,5 +1,5 @@
-# Kullanıcı girişi için JWT token üreten ve mevcut oturum açmış 
-# kullanıcının profil bilgilerini dönen API uç noktalarını tanımlar.
+# Kullanıcı adı ve şifreyi veritabanıyla kontrol eder.
+# Views = account iş mantığı
 
 from rest_framework.views import APIView
 from rest_framework.response import Response

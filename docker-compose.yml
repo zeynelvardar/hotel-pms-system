@@ -1,3 +1,8 @@
+# Projedeki birden fazla servisin (dbase, backend, frontend)
+# hangi imajlarla, hangi portlarla, hangi ağlar ve yarlar üzerinden
+# çalışacağını tek bir merkezden tanımlayan ve birlikte ayağa kaldıran
+# orkestrasyon konfigürasyon dosyasıdır.
+
 services:
   db:
     image: postgres:16-alpine
