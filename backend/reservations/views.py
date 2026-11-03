@@ -22,7 +22,7 @@ from accounts.permissions import IsReceptionOrAdmin
 from core.pagination import StandardResultsSetPagination
 
 from .models import Reservation, ReservationStatus, HotelSettings
-from .serializers import DashboardReservationSerializer, ReservationCreateSerializer
+from .serializers import DashboardReservationSerializer, ReservationCreateSerializer, ReservationCreateUpdateSerializer
 from .services import ReservationActionService, NightAuditService
 
 class ReservationViewSet(viewsets.ModelViewSet): # ModelViewSet sınıfının özellikleri inherit (miras) alınır. [CRUD İşlemleri]
@@ -37,15 +37,21 @@ class ReservationViewSet(viewsets.ModelViewSet): # ModelViewSet sınıfının ö
 
     # Serializer Sınıfı Seçimi (Create-Update veya Read)
     def get_serializer_class(self):
-        # N+1 Sorgu Problemini önleyen Zırh: select_related
-        if self.action in ["create", "update", "partial_update"]: # self.action = ViewSet içinde hangi isteğin (list, create, update) veya özel bir eylem işlendiğini belirten o anki işlem türü bilgisidir.
-            return ReservationCreateSerializer # yazma işlemleri serializer'ı (create, update)
-        return DashboardReservationSerializer # okuma işlemleri serializer'ı (read)
+        # Yazma (Create/Update) işlemleri için akıllı serializer'ımız çalışır.
+        if self.action in ["create", "update", "partial_update"]:
+            return ReservationCreateUpdateSerializer
+        # Okuma işlemleri için Dashboard serializer çalışır.
+        return DashboardReservationSerializer
 
     # Python ve PostgreSQL arasındaki akıllı sorgu planlayıcısıdır ()
     def get_queryset(self):
-        return Reservation.objects.select_related( # veriyi istenilen şekilde (sıralama/filtreleme) sonrası çeker.
+        # N+1 Soru Problemini Önleyen Zırh:
+        # Ana misafir ve oda için select_related (One-to-One / Foreign Key)
+        # Ek misafirler için prefetch_related (Many-to-Many) kullanılır.
+        return Reservation.objects.select_related(
             "guest", "room", "room__room_type"
+        ).prefetch_related(
+            "accompanying_guests"
         ).order_by("check_in_date")
 
     def _get_paginated_response_for_qs(self, qs): # _ = dışarıdan çağırılamaz, sınıfın kendi işlerinde kullanılır demektir.
