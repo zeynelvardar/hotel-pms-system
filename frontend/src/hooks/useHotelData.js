@@ -94,6 +94,20 @@ export const useCreateReservation = (onSuccessCallBack) => { // parametre react 
     });
 };
 
+export const useUpdateReservation = (onSuccessCallBack) => {
+    const queryClient = useQueryClient(); // Ön Bellek Yöneticisi: sunucuda her veri değiştiğinde cache'deki eski verileri geçersiz kılıp güncellenmesini sağlar.
+    return useMutation({
+        mutationFn: ({ id, data }) => hotelService.updateReservation(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['roomRack'] });
+            toast.success('Rezervasyon güncellendi.')
+            if (onSuccessCallBack) onSuccessCallBack();
+        },
+        onError: (error) => toast.error(error.response?.data?.detail || 'Güncelleme başarısız.')
+    });
+};
+
 export const useReservationAction = () => {
     const queryClient = useQueryClient(); // Ön Bellek Yöneticisi: sunucuda veri değiştiğinde, cache'deki eski verileri geçersiz kılmayı sağlar, böylece veriler güncellenir.
 
@@ -121,17 +135,47 @@ export const useReservationAction = () => {
         }
     });
 
+    const cancelMutation = useMutation({
+        mutationFn: (id) => hotelService.cancelReservation(id),
+        OnSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['roomRack'] });
+            toast.success('Rezervasyon iptal edildi.')
+        },
+        onError: (error) => toast.error(error.response?.data?.detail || 'İptal işlemi başarısız.')
+    });
+    
+
     return { // react bileşeni içinde işlemleri bu isimlemelerle çağıracağız. (karışıklık olmaması için.)
         checkIn: checkInMutation.mutate,
         isCheckingIn: checkInMutation.isPending,
         checkOut: checkOutMutation.mutate,
         isCheckingOut: checkOutMutation.isPending,
+        cancelRes: cancelMutation.mutate,
+        isCancelling: cancelMutation.isPending,
     };
+};
+
+// ==========================================
+// 4. MİSAFİR KARTI HOOK'LARI
+// ==========================================
+
+export const useUpdateGuest = (onSuccessCallBack) => {
+    const queryClient = useQueryClient(); // Ön Bellek Yöneticisi
+    return useMutation({
+        mutationFn: ({ id, data }) => hotelService.updateGuest(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] }); 
+            toast.success('Misafir bilgileri güncellendi.')
+            if (onSuccessCallBack) onSuccessCallBack;
+        },
+        onError: (error) => toast.error(error.response?.data?.detail || 'Güncelleme başarısız.')
+    });
 };
 
 
 // ==========================================
-// 4. SİSTEM GÜNÜ & NIGHT AUDIT HOOK'U
+// 5. SİSTEM GÜNÜ & NIGHT AUDIT HOOK'U
 // ==========================================
 
 export const useSystemDate = () => {

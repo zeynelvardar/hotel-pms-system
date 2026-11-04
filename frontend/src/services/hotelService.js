@@ -56,6 +56,12 @@ export const hotelService = { // büyük bir nesne
         return response.data;
     },
 
+    updateReservation: async (id, reservationData) => {
+        // Patch kullanarak sadece değişen verileri (kısmi güncelleme) gönderilir.
+        const response = await api.patch(`reservations/${id}/`, reservationData);
+        return response.data;
+    },
+
     checkInReservation: async (reservationId) => {
         const response = await api.post(`reservations/${reservationId}/check-in/`);
         return response.data;
@@ -66,8 +72,22 @@ export const hotelService = { // büyük bir nesne
         return response.data;
     },
 
+    cancelReservation: async (reservationId) => {
+        const response = await api.post(`reservations/${reservationId}/cancel/`);
+        return response.data;
+    },
+
     // ==========================================
-    // 4. OTEL SİSTEM AKSİYONLARI
+    // 4. MİSAFİR KARTI UÇLARI (Tekil Profil)
+    // ==========================================
+    updateGuest: async (id, guestData) => {
+        const response = await api.patch(`guests/${id}/`, guestData);
+        return response.data;
+    },
+    
+    
+    // ==========================================
+    // 5. OTEL SİSTEM AKSİYONLARI
     // ==========================================
     getSystemDate: async () => {
         const response = await api.get('reservations/system-date/');
@@ -79,4 +99,4 @@ export const hotelService = { // büyük bir nesne
         const response = await api.post(`reservations/night-audit/`);
         return response.data;
     }
-};    
+};
