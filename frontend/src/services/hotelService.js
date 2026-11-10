@@ -98,5 +98,10 @@ export const hotelService = { // büyük bir nesne
     triggerNightAudit: async () => {
         const response = await api.post(`reservations/night-audit/`);
         return response.data;
-    }
+    },
+
+    getAgencyChoices: async () => {
+        const response = await api.get('reservations/agency-chocies/');
+    },
 };
+

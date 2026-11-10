@@ -21,8 +21,8 @@ from rest_framework.response import Response # dönülen veriyi json'a çevirir.
 from accounts.permissions import IsReceptionOrAdmin
 from core.pagination import StandardResultsSetPagination
 
-from .models import Reservation, ReservationStatus, HotelSettings
-from .serializers import DashboardReservationSerializer, ReservationCreateSerializer, ReservationCreateUpdateSerializer
+from .models import Reservation, ReservationStatus, HotelSettings, ReservationAgency
+from .serializers import DashboardReservationSerializer, ReservationC1reateSerializer, ReservationCreateUpdateSerializer
 from .services import ReservationActionService, NightAuditService
 
 class ReservationViewSet(viewsets.ModelViewSet): # ModelViewSet sınıfının özellikleri inherit (miras) alınır. [CRUD İşlemleri]
@@ -123,6 +123,15 @@ class ReservationViewSet(viewsets.ModelViewSet): # ModelViewSet sınıfının ö
         """Tüm Veritabanı Dökümü (Genel Log ve Arama Listesi için)"""
         qs = self.get_queryset().order_by("-id")
         return self._get_paginated_response_for_qs(qs)
+
+    @action(detail=False, methods=["get"], url_path="agency-chocies")
+    def get_agency_choices(self, request):
+        """Backend'deki ReservationAgency enum'ını dinamik olarak frontend'e servis eder."""
+        choices = [
+            {"value": key, "label": label}
+            for key, label in ReservationAgency.chocies
+        ]
+        return Response(choices)
 
     
     # ==========================================

@@ -72,6 +72,14 @@ export const useDashboardCheckedOut = () => useQuery({ queryKey: ['dashboard', '
 export const useDashboardCancelled = () => useQuery({ queryKey: ['dashboard', 'cancelled'], queryFn: hotelService.getCancelled });
 export const useDashboardAllRecords = () => useQuery({ queryKey: ['dashboard', 'allRecords'], queryFn: hotelService.getAllRecords });
 
+export const useAgencyChoices = () => {
+    return useQuery({
+        queryKey: ['agencyChoices'],
+        queryFn: hotelService.getAgencyChoices,
+        staleTime: 1000 * 60 * 60, // 1 saat taze kalır.
+    });
+};
+
 // ==========================================
 // 3. REZERVASYON AKSİYON HOOK'LARI (Yazma/Değiştirme)
 // ==========================================
