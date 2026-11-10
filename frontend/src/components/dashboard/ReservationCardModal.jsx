@@ -9,7 +9,7 @@ import { useState, useEffect } from 'react';
 import { formatDate, getNextDay } from '../../utils/formatters';
 import { useUpdateReservation, useReservationAction, useAgencyChoices } from '../../hooks/useHotelData';
 import { X, Save, Users, Calendar, Building, CreditCard, FileText, Ban, Loader2 } from 'lucide-react';
-import GuestCardModal from './GuestCardModal'; 
+import GuestCardModal from './GuestCardModal';
 
 const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
     // ==========================================
@@ -65,8 +65,8 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
 
     // Odadaki tüm misafirleri (Ana + Ek) tek bir listede birleştir (UI gösterimi için)
     const allGuests = [
-        { ...reservationData.guest, is_main: true },
-        ...(reservationData.accompanying_guests || []).map(g => ({ ...g, is_main: false }))
+        ...(reservationData.guest ? [{ ...reservationData.guest, is_main: true }] : []),
+        ...(reservationData.accompanying_guests || []).map(g => ({ ...g, is_main: false}))
     ];
 
     // ==========================================
@@ -319,9 +319,13 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="text-[10px] font-bold text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-blue-50 px-2 py-1 rounded">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleGuestDoubleClick(g)}
+                                        className="text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded transition-colors  cursor-pointer"
+                                    >
                                         Düzenle
-                                    </div>
+                                    </button>
                                 </div>
                             ))}
                         </div>
@@ -342,7 +346,6 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
                     isOpen={isGuestCardOpen}
                     onClose={() => setIsGuestCardOpen(false)}
                     guestData={selectedGuest}
-                    reservationId={formData.id}
                     isReadOnly={isReadOnly}
                 />
             )} 

@@ -18,6 +18,7 @@ class DashboardReservationSerializer(serializers.ModelSerializer):
     Resepsiyon panosu için optimize edilmiş salt-okunur (read-only) serializer.
     İlişkili verileri düzleştirerek (flatten) frontend'e hazır hale getirir.
     """
+    guest = GuestSerializer(read_only=True)
     guest_full_name = serializers.CharField(source="guest.__str__", read_only=True)
     guest_phone = serializers.CharField(source="guest.phone", read_only=True)
     room_number = serializers.CharField(source="room.room_number", read_only=True)
@@ -33,6 +34,7 @@ class DashboardReservationSerializer(serializers.ModelSerializer):
         model = Reservation
         fields = [
             "id",
+            "guest",
             "guest_full_name",
             "guest_phone",
             "room_number",
