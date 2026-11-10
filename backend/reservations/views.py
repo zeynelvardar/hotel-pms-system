@@ -22,7 +22,7 @@ from accounts.permissions import IsReceptionOrAdmin
 from core.pagination import StandardResultsSetPagination
 
 from .models import Reservation, ReservationStatus, HotelSettings, ReservationAgency
-from .serializers import DashboardReservationSerializer, ReservationC1reateSerializer, ReservationCreateUpdateSerializer
+from .serializers import DashboardReservationSerializer, ReservationCreateUpdateSerializer, ReservationCreateUpdateSerializer
 from .services import ReservationActionService, NightAuditService
 
 class ReservationViewSet(viewsets.ModelViewSet): # ModelViewSet sınıfının özellikleri inherit (miras) alınır. [CRUD İşlemleri]
