@@ -124,12 +124,12 @@ class ReservationViewSet(viewsets.ModelViewSet): # ModelViewSet sınıfının ö
         qs = self.get_queryset().order_by("-id")
         return self._get_paginated_response_for_qs(qs)
 
-    @action(detail=False, methods=["get"], url_path="agency-chocies")
+    @action(detail=False, methods=["get"], url_path="agency-choices")
     def get_agency_choices(self, request):
         """Backend'deki ReservationAgency enum'ını dinamik olarak frontend'e servis eder."""
         choices = [
             {"value": key, "label": label}
-            for key, label in ReservationAgency.chocies
+            for key, label in ReservationAgency.choices
         ]
         return Response(choices)
 

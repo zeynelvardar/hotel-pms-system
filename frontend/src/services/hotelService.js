@@ -101,7 +101,8 @@ export const hotelService = { // büyük bir nesne
     },
 
     getAgencyChoices: async () => {
-        const response = await api.get('reservations/agency-chocies/');
+        const response = await api.get('reservations/agency-choices/');
+        return response.data;
     },
 };
 
