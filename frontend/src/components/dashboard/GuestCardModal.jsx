@@ -26,7 +26,7 @@ const GuestCardModal = ({ isOpen, onClose, guestData, isReadOnly }) => {
     });
 
     useEffect(() => {
-        if (isOpen && guestData) {
+        if (isOpen && guestData && !isEditing) {
             setFormData({
                 id: guestData.id,
                 firstName: guestData.first_name || '',
@@ -38,10 +38,9 @@ const GuestCardModal = ({ isOpen, onClose, guestData, isReadOnly }) => {
                 email: guestData.email || '',
                 phone: guestData.phone || ''
             });
-            setIsEditing(false);
             setIdentityStatus(null);
         }
-    }, [isOpen, guestData]);
+    }, [isOpen, guestData, isEditing]);
 
     useEffect(() => {
         if (!formData?.identityNumber || formData.identityNumber.length < 7) {

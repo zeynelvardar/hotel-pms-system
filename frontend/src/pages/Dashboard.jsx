@@ -4,7 +4,7 @@
  * SoC Prensibi: Yalnızca arayüz (UI) state'ini ve bileşen orkestrasyonunu yönetir.
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import NewReservationModal from '../components/dashboard/NewReservationModal';
 import ReservationTable from '../components/dashboard/ReservationTable';
 import ReservationCardModal from '../components/dashboard/ReservationCardModal';
@@ -27,7 +27,7 @@ const Dashboard = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   // Çift tıklanan rezervasyon ve modal state'i
-  const [selectedReservation, setSelectedReservation] = useState(null);
+  const [selectedReservationId, setSelectedReservationId] = useState(null);
   const [isReservationCardOpen, setIsReservationCardOpen] = useState(false);
 
   const { data: systemDate, isDateLoading } = useSystemDate();
@@ -51,7 +51,17 @@ const Dashboard = () => {
   const isSyncing = Object.values(queries).some(q => q.isFetching);
 
   // ==========================================
-  // 3. SEKME YAPILANDIRMASI (8 PMS SEKMESİ)
+  // 3. TÜRETİLMİŞ DURUM (DERIVED STATE)
+  // ==========================================
+  // activeData tanımlandıktan sonra hafızadaki güncel nesneyi bulur
+  const selectedReservation = useMemo(() => {
+    if (!selectedReservationId || !activeData?.data) return null;
+    const list = Array.isArray(activeData.data) ? activeData.data : activeData.data.results || [];
+    return list.find((r) => r.id === selectedReservationId) || null;
+  }, [selectedReservationId, activeData]);
+
+  // ==========================================
+  // 4. SEKME YAPILANDIRMASI (8 PMS SEKMESİ)
   // ==========================================
   const tabs = [
     { id: 'reservations', label: 'Bekleyenler', icon: CalendarDays, data: queries.reservations, baseColor: 'text-indigo-600', activeClass: 'bg-indigo-50 border-indigo-400 text-indigo-800' },
@@ -65,7 +75,7 @@ const Dashboard = () => {
   ];
 
   // ==========================================
-  // 4. AKSİYON İŞLEYİCİLER (HANDLERS)
+  // 5. AKSİYON İŞLEYİCİLER (HANDLERS)
   // ==========================================
   const handleNightAudit = () => {
     const isConfirmed = window.confirm("DİKKAT: Gün Sonu (Night Audit) işlemi başlatılacak. Dünden kalan gelmemiş misafirler No-Show olarak işaretlenecek ve sistem günü bir sonraki güne atlayacaktır. Onaylıyor musunuz?");
@@ -73,16 +83,16 @@ const Dashboard = () => {
   };
 
   const handleRowDoubleClick = (reservation) => {
-    setSelectedReservation(reservation);
+    setSelectedReservationId(reservation.id);
     setIsReservationCardOpen(true);
   };
   
   // ==========================================
-  // 5. EKRAN ÇİZİMİ (RENDER)
+  // 6. EKRAN ÇİZİMİ (RENDER)
   // ==========================================
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 md:p-6">
-      {/* 5.1 Üst Bilgi (Header) ve Butonlar */}
+      {/* 6.1 Üst Bilgi (Header) ve Butonlar */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-800">Operasyon Panosu</h2>
@@ -97,7 +107,6 @@ const Dashboard = () => {
         </div>
       
         <div className="flex flex-wrap items-center gap-3">
-          {/* Sistem Günü Rozeti */}
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold shadow-inner">
             <Calendar size={15} className="text-blue-600" />
             <span className="text-slate-500">Sistem Günü:</span>
@@ -124,7 +133,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* 5.2 Sekmeler (8 Kolonlu Grid) */}
+      {/* 6.2 Sekmeler (8 Kolonlu Grid) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -159,7 +168,7 @@ const Dashboard = () => {
         })}
       </div>
 
-      {/* 5.3 Tablo Bileşeni */}
+      {/* 6.3 Tablo Bileşeni */}
       <ReservationTable
         data={activeData?.data}
         type={activeTab}
@@ -167,17 +176,20 @@ const Dashboard = () => {
         onRowDoubleClick={handleRowDoubleClick}
       />
 
-      {/* 5.4 Yeni Rezervasyon Modalı */}
+      {/* 6.4 Yeni Rezervasyon Modalı */}
       <NewReservationModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       />
 
-      {/* 5.5 Rezervasyon Kartı Modalı */}
+      {/* 6.5 Rezervasyon Kartı Modalı */}
       {selectedReservation && (
         <ReservationCardModal
           isOpen={isReservationCardOpen}
-          onClose={() => setIsReservationCardOpen(false)}
+          onClose={() => {
+            setIsReservationCardOpen(false);
+            setSelectedReservationId(null);
+          }}
           reservationData={selectedReservation}
         />
       )}

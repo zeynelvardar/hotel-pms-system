@@ -1,86 +1,117 @@
 /**
  * ReservationCardModal (Stay Card)
- * Bir rezervasyonun kontrat (giriş, çıkış, acenta, fiyat) detaylarını yönetir.
- * Odadaki misafirleri (1. Ana Misafir ve Ek Misafirler) listeler.
- * Misafirlere çift tıklanarak GuestCardModal'ın açılmasını tetikler.
+ * Rezervasyonun kontrat (tarih, acenta, fiyat, not) detaylarını yönetir.
+ * Odadaki misafirleri listeler ve çift tıklamayla GuestCardModal'ı tetikler.
+ * 
+ * Mimari Güvenceler:
+ * 1. Rules of Hooks: Tüm hook ve useMemo çağrıları erken return'den önce çalışır.
+ * 2. Derived State: allGuests ve selectedGuest ID üzerinden doğrudan türetilir.
+ * 3. Form Shield: isEditing aktifken arka plan sorguları formu sıfırlamaz.
  */
 
-import { useState, useEffect } from 'react';
-import { formatDate, getNextDay } from '../../utils/formatters';
+import { useState, useEffect, useMemo } from 'react';
+import { getNextDay } from '../../utils/formatters';
 import { useUpdateReservation, useReservationAction, useAgencyChoices } from '../../hooks/useHotelData';
 import { X, Save, Users, Calendar, Building, CreditCard, FileText, Ban, Loader2 } from 'lucide-react';
 import GuestCardModal from './GuestCardModal';
 
 const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
     // ==========================================
-    // 1. YEREL DURUM (STATE)
+    // 1. YEREL DURUM (LOCAL STATE)
     // ==========================================
     const [formData, setFormData] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     
-    // Alt Modal (Misafir Kartı) Yönetimi
-    const [selectedGuest, setSelectedGuest] = useState(null);
+    // Alt Modal (Misafir Kartı) ID Takibi
+    const [selectedGuestId, setSelectedGuestId] = useState(null);
     const [isGuestCardOpen, setIsGuestCardOpen] = useState(false);
 
     // ==========================================
-    // 2. SUNUCU AKSİYONLARI (HOOKS & MUTATIONS)
+    // 2. SUNUCU SORGULARI VE MUTASYONLAR
     // ==========================================
-    // Dinamik acenta listesini backend'den çekiyoruz
     const { data: agencyChoices, isLoading: isAgenciesLoading } = useAgencyChoices();
 
     const updateMutation = useUpdateReservation(() => {
-        setIsEditing(false); // Başarılı olunca düzenleme modundan çık
+        setIsEditing(false);
     });
     
     const { cancelRes, isCancelling } = useReservationAction();
 
     // ==========================================
-    // 3. YAŞAM DÖNGÜSÜ (EFFECTS)
+    // 3. TÜRETİLMİŞ DURUMLAR (HOOK SIRASI KORUMASI)
+    // ==========================================
+    // Erken return'den (early return) önce çalışmak zorundadır
+    const allGuests = useMemo(() => {
+        if (!reservationData) return [];
+        return [
+            ...(reservationData.guest ? [{ ...reservationData.guest, is_main: true }] : []),
+            ...(reservationData.accompanying_guests || []).map(g => ({ ...g, is_main: false }))
+        ];
+    }, [reservationData]);
+
+    const selectedGuest = useMemo(() => {
+        if (!selectedGuestId) return null;
+        return allGuests.find((g) => g.id === selectedGuestId) || null;
+    }, [selectedGuestId, allGuests]);
+
+    // ==========================================
+    // 4. YAŞAM DÖNGÜSÜ (EFFECTS)
     // ==========================================
     useEffect(() => {
         if (isOpen && reservationData) {
-            setFormData({
-                id: reservationData.id,
-                checkIn: reservationData.check_in_date,
-                checkOut: reservationData.check_out_date,
-                agency: reservationData.agency || 'DIRECT',
-                totalPrice: reservationData.total_price || '',
-                notes: reservationData.notes || '',
-                status: reservationData.status
-            });
+            // Arka plandaki invalidateQueries tetiklendiğinde kullanıcının yazdıklarını ezme
+            if (!isEditing) {
+                setFormData({
+                    id: reservationData.id,
+                    checkIn: reservationData.check_in_date,
+                    checkOut: reservationData.check_out_date,
+                    agency: reservationData.agency || 'DIRECT',
+                    totalPrice: reservationData.total_price || '',
+                    notes: reservationData.notes || '',
+                    status: reservationData.status
+                });
+            }
+        } else if (!isOpen) {
             setIsEditing(false);
+            setSelectedGuestId(null);
+            setIsGuestCardOpen(false);
         }
-    }, [isOpen, reservationData]);
+    }, [isOpen, reservationData, isEditing]);
 
+    // ==========================================
+    // 5. ERKEN DÖNÜŞ (EARLY RETURN)
+    // ==========================================
     if (!isOpen || !reservationData || !formData) return null;
 
     // ==========================================
-    // 4. İŞ MANTIĞI & KİLİTLER (BUSINESS LOGIC)
+    // 6. İŞ MANTIĞI & KİLİTLER
     // ==========================================
-    // Kapalı kayıtlar salt okunurdur. (isReadOnly true ise Düzenle butonu görünmez)
     const isReadOnly = ['CHECKED_OUT', 'CANCELLED', 'NO_SHOW'].includes(formData.status);
-    
-    // İçeride konaklayan misafirin giriş tarihi değiştirilemez
-    const isCheckInLocked = formData.status === 'IN_HOUSE'; 
-
-    // Odadaki tüm misafirleri (Ana + Ek) tek bir listede birleştir (UI gösterimi için)
-    const allGuests = [
-        ...(reservationData.guest ? [{ ...reservationData.guest, is_main: true }] : []),
-        ...(reservationData.accompanying_guests || []).map(g => ({ ...g, is_main: false}))
-    ];
+    const isCheckInLocked = formData.status === 'IN_HOUSE';
 
     // ==========================================
-    // 5. HANDLER'LAR
+    // 7. AKSİYON İŞLEYİCİLER (HANDLERS)
     // ==========================================
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    const handleCancelEdit = () => {
+        setFormData({
+            id: reservationData.id,
+            checkIn: reservationData.check_in_date,
+            checkOut: reservationData.check_out_date,
+            agency: reservationData.agency || 'DIRECT',
+            totalPrice: reservationData.total_price || '',
+            notes: reservationData.notes || '',
+            status: reservationData.status
+        });
+        setIsEditing(false);
+    };
+
     const handleSave = (e) => {
         e.preventDefault();
-        
-        // Sadece değiştirilebilir (Konaklama/Kontrat) verileri yolla
         const payload = {
             check_in_date: formData.checkIn,
             check_out_date: formData.checkOut,
@@ -88,25 +119,24 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
             total_price: formData.totalPrice || '0.00',
             notes: formData.notes
         };
-
         updateMutation.mutate({ id: formData.id, data: payload });
     };
 
     const handleCancelReservation = () => {
-        const confirmCancel = window.confirm("Bu rezervasyonu IPTAL (CANCELLED) durumuna almak istediğinize emin misiniz? Bu işlem geri alınamaz.");
-        if (confirmCancel) {
+        const isConfirmed = window.confirm("Bu rezervasyonu IPTAL durumuna almak istediğinize emin misiniz? Bu işlem geri alınamaz.");
+        if (isConfirmed) {
             cancelRes(formData.id);
             onClose();
         }
     };
 
     const handleGuestDoubleClick = (guest) => {
-        setSelectedGuest(guest);
+        setSelectedGuestId(guest.id);
         setIsGuestCardOpen(true);
     };
 
     // ==========================================
-    // 6. RENDER (UI)
+    // 8. EKRAN ÇİZİMİ (RENDER)
     // ==========================================
     return (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
@@ -132,11 +162,10 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
 
                 <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
                     
-                    {/* SOL PANEL: Konaklama & Kontrat Bilgileri */}
+                    {/* SOL PANEL: Konaklama & Kontrat Formu */}
                     <div className="w-full md:w-1/2 p-6 overflow-y-auto border-r border-slate-100 bg-slate-50/50">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500">Konaklama Detayı</h3>
-                            {/* Salt okunur değilse ve edit modunda değilse düzenle butonu çıkar */}
                             {!isReadOnly && !isEditing && (
                                 <button 
                                     type="button" 
@@ -148,9 +177,7 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
                             )}
                         </div>
 
-                        {/* Tüm inputları saran Ana Form (Hiyerarşi Düzeltildi) */}
                         <form id="res-card-form" onSubmit={handleSave} className="space-y-4">
-                            
                             {/* Acenta */}
                             <div>
                                 <label className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-1">
@@ -233,9 +260,8 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
                                 />
                             </div>
 
-                            {/* Aksiyon Butonları (Form İçinde) */}
+                            {/* Aksiyon Butonları */}
                             <div className="flex items-center justify-between pt-4 mt-2 border-t border-slate-200">
-                                {/* İptal butonu sadece RESERVED iken gösterilir */}
                                 {formData.status === 'RESERVED' && !isEditing && (
                                     <button 
                                         type="button" 
@@ -252,18 +278,7 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
                                     <div className="flex gap-2 w-full justify-end">
                                         <button 
                                             type="button" 
-                                            onClick={() => {
-                                                setIsEditing(false); 
-                                                // Vazgeçildiğinde verileri orjinal state'e geri çevir
-                                                setFormData({
-                                                    ...formData, 
-                                                    checkIn: reservationData.check_in_date, 
-                                                    checkOut: reservationData.check_out_date, 
-                                                    agency: reservationData.agency || 'DIRECT',
-                                                    totalPrice: reservationData.total_price || '0.00',
-                                                    notes: reservationData.notes || ''
-                                                });
-                                            }} 
+                                            onClick={handleCancelEdit} 
                                             className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded-lg transition cursor-pointer"
                                         >
                                             Vazgeç
@@ -282,13 +297,12 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
                         </form>
                     </div>
 
-                    {/* SAĞ PANEL: Misafir Listesi (Guest Roster) */}
+                    {/* SAĞ PANEL: Misafir Listesi (Roster) */}
                     <div className="w-full md:w-1/2 p-6 bg-white overflow-y-auto custom-scrollbar flex flex-col">
                         <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
                             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                                 <Users size={16} className="text-blue-500"/> Odadaki Misafirler
                             </h3>
-                            {/* Gelecekte Eklenebilir: Yeni Misafir Ekle Butonu */}
                         </div>
 
                         <div className="space-y-3 flex-1">
@@ -298,7 +312,6 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
                                     onDoubleClick={() => handleGuestDoubleClick(g)}
                                     className="group flex items-center justify-between p-3 border border-slate-200 rounded-xl hover:border-blue-400 hover:shadow-md hover:bg-blue-50/30 transition-all cursor-pointer bg-white relative overflow-hidden"
                                 >
-                                    {/* Ana misafir işaretçisi */}
                                     {g.is_main && (
                                         <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
                                     )}
@@ -322,7 +335,7 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
                                     <button
                                         type="button"
                                         onClick={() => handleGuestDoubleClick(g)}
-                                        className="text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded transition-colors  cursor-pointer"
+                                        className="text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded transition-colors cursor-pointer"
                                     >
                                         Düzenle
                                     </button>
@@ -332,7 +345,7 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
                         
                         <div className="mt-4 pt-4 border-t border-slate-100 text-center">
                              <p className="text-[11px] font-medium text-slate-400">
-                                Kimlik bilgilerini görmek veya düzenlemek için karta çift tıklayın.
+                                Kimlik bilgilerini görmek veya düzenlemek için karta çift tıklayın veya Düzenle butonuna basın.
                              </p>
                         </div>
                     </div>
@@ -341,10 +354,13 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
             </div>
             
             {/* Alt Modal: GuestCardModal */}
-                {isGuestCardOpen && selectedGuest && (
+            {isGuestCardOpen && selectedGuest && (
                 <GuestCardModal
                     isOpen={isGuestCardOpen}
-                    onClose={() => setIsGuestCardOpen(false)}
+                    onClose={() => {
+                        setIsGuestCardOpen(false);
+                        setSelectedGuestId(null);
+                    }}
                     guestData={selectedGuest}
                     isReadOnly={isReadOnly}
                 />
