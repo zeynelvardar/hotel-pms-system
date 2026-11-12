@@ -8,111 +8,99 @@ Katman sadece Frontend ile servisler arasındaki köprü görevini üstlenir:
   - Dinamik serializer seçimi yapar (kayıt/güncelleme) için.
 
 - Operasyonel Dashboard Endpointleri (GET)
-  - Gelenler-Inhouse-Ayrılacaklar etc.
+  - Gelenler-Inhouse-Ayrılacaklar vb.
 
 - Durum Değişiklikleri ( POST / RPC Aksiyonları )
   - Check-in, Check-out, İptal ve Gün Sonu gibi operasyonel butonları dinler.
 """
 
 from django.core.exceptions import ValidationError
-from rest_framework import viewsets, status # CRUD işlemleri için DRF kütüphanesi
-from rest_framework.decorators import action # özel endpoint oluşturma dekoratörü
-from rest_framework.response import Response # dönülen veriyi json'a çevirir.
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from accounts.permissions import IsReceptionOrAdmin
 from core.pagination import StandardResultsSetPagination
 
 from .models import Reservation, ReservationStatus, HotelSettings, ReservationAgency
-from .serializers import DashboardReservationSerializer, ReservationCreateUpdateSerializer, ReservationCreateUpdateSerializer
+from .serializers import DashboardReservationSerializer, ReservationCreateUpdateSerializer
 from .services import ReservationActionService, NightAuditService
 
-class ReservationViewSet(viewsets.ModelViewSet): # ModelViewSet sınıfının özellikleri inherit (miras) alınır. [CRUD İşlemleri]
+
+class ReservationViewSet(viewsets.ModelViewSet):
     """
     Rezervasyon temel CRUD ve Operasyonel Dashboard / Action Endpointleri.
     SoC prensibi gereği iş mantıkları 'services.py' dosyasındadır.
     Burada yalnızca HTTP routing, yetkilendirme ve serializasyon yapılır.
     """
-    # Class Attirbutes
-    permission_classes = [IsReceptionOrAdmin] # yetki kontrolü
-    pagination_class = StandardResultsSetPagination # sayfalama kuralları
+    permission_classes = [IsReceptionOrAdmin]
+    pagination_class = StandardResultsSetPagination
 
-    # Serializer Sınıfı Seçimi (Create-Update veya Read)
     def get_serializer_class(self):
-        # Yazma (Create/Update) işlemleri için akıllı serializer'ımız çalışır.
         if self.action in ["create", "update", "partial_update"]:
             return ReservationCreateUpdateSerializer
-        # Okuma işlemleri için Dashboard serializer çalışır.
         return DashboardReservationSerializer
 
-    # Python ve PostgreSQL arasındaki akıllı sorgu planlayıcısıdır ()
     def get_queryset(self):
-        # N+1 Soru Problemini Önleyen Zırh:
-        # Ana misafir ve oda için select_related (One-to-One / Foreign Key)
-        # Ek misafirler için prefetch_related (Many-to-Many) kullanılır.
+        # N+1 SORGU KORUMASI:
+        # room ve room__room_type (fiziksel oda varsa)
+        # booked_room_type (fiziksel oda olmasa da kapasite için her zaman vardır)
         return Reservation.objects.select_related(
-            "guest", "room", "room__room_type"
+            "guest", "room", "room__room_type", "booked_room_type"
         ).prefetch_related(
             "accompanying_guests"
         ).order_by("check_in_date")
 
-    def _get_paginated_response_for_qs(self, qs): # _ = dışarıdan çağırılamaz, sınıfın kendi işlerinde kullanılır demektir.
+    def _get_paginated_response_for_qs(self, qs):
         """
         DRY Prensibi:
-        Aşağıdaki 8 farklı API Endpoint'inde tekrar tekrar pagination kodları
-        yazmamak için kullanılan private yarımcı metod.
+        Farklı API Endpoint'lerinde tekrar pagination kodları yazmamak için yardımcı metod.
         """
-        page = self.paginate_queryset(qs) # yerleşik DRF fonksiyonu. istedği inceler, kuralı uygular(20 sınır) veriyi keser (20-20-20).
+        page = self.paginate_queryset(qs)
         if page is not None:
-            return self.get_paginated_response(self.get_serializer(page, many=True).data) # fonksiyonu kendi içinden önce çağırır, sonra yerleşik get_serializers() fonksiyonu ile veriyi ilgili serializer'a yönlendirir, içine parametre olarak listeyi verir.
-        return Response(self.get_serializer(qs, many=True).data) # yukarıda yaptığımız işlemi Response olarak dönüyoruz.
+            return self.get_paginated_response(self.get_serializer(page, many=True).data)
+        return Response(self.get_serializer(qs, many=True).data)
+
 
     # ==========================================
-    # --- GET: OPERASYON PANOSU (DASHBOARD) UÇLARI ---
-    # Not: Gerçek zamana göre değil, Otel 'Sistem Gününe' göre filtrelenir.
+    # --- GET: OPERASYON PANOSU (DASHBOARD) ---
     # ==========================================
 
     @action(detail=False, methods=["get"], url_path="dashboard/reservations")
     def reservations_list(self, request):
-        """Bekleyen Tüm Rezervasyonlar"""
-        current_date = HotelSettings.get_current_date() # sistem tarihi
-        qs = self.get_queryset().filter(status=ReservationStatus.RESERVED, check_in_date__gte=current_date) # gelen rezervasyon verisi  #__gte Django sorgu filtreleme operatörüdür: >= büyük veya eşittir anlamına gelir.
-        return self._get_paginated_response_for_qs(qs) # sayfalamayı döner. (20-20)
+        current_date = HotelSettings.get_current_date()
+        qs = self.get_queryset().filter(status=ReservationStatus.RESERVED, check_in_date__gte=current_date)
+        return self._get_paginated_response_for_qs(qs)
 
     @action(detail=False, methods=["get"], url_path="dashboard/arrivals")
     def arrivals_today(self, request):
-        """Bugün Gelecekler (Arrivals)"""
-        current_date = HotelSettings.get_current_date() # sistem tarihi
-        qs = self.get_queryset().filter(status=ReservationStatus.RESERVED, check_in_date=current_date) # qs ile gelen rezervasyon verisi 
-        return self._get_paginated_response_for_qs(qs) # gelen qs verisini biçimlendirip döner (20-20)
+        current_date = HotelSettings.get_current_date()
+        qs = self.get_queryset().filter(status=ReservationStatus.RESERVED, check_in_date=current_date)
+        return self._get_paginated_response_for_qs(qs)
 
     @action(detail=False, methods=["get"], url_path="dashboard/arrived-today")
     def arrived_today(self, request):
-        """Gerçekleşen Girişler"""
-        current_date = HotelSettings.get_current_date() # sistem tarihi
-        qs = self.get_queryset().filter(status=ReservationStatus.IN_HOUSE, check_in_date=current_date) # gelen rezervasyon verisi
-        return self._get_paginated_response_for_qs(qs)  # gelen qs verisini biçimlendirip döner (20-20)
+        current_date = HotelSettings.get_current_date()
+        qs = self.get_queryset().filter(status=ReservationStatus.IN_HOUSE, check_in_date=current_date)
+        return self._get_paginated_response_for_qs(qs)
     
     @action(detail=False, methods=["get"], url_path="dashboard/in-house")
     def in_house(self, request):
-        """Konaklayanlar (In-House)"""
-        qs = self.get_queryset().filter(status=ReservationStatus.IN_HOUSE) #qs ile gelen rezervasyon verisi.
-        return self._get_paginated_response_for_qs(qs) # gelen qs verisini biçimlendirip döner (20-20)
+        qs = self.get_queryset().filter(status=ReservationStatus.IN_HOUSE)
+        return self._get_paginated_response_for_qs(qs)
 
     @action(detail=False, methods=["get"], url_path="dashboard/departures")
     def departures_today(self, request):
-        """Bugün Ayrılacaklar (Çıkış günü tarihi sistem günü olan IN_HOUSE'lar)"""
         current_date = HotelSettings.get_current_date()
         qs = self.get_queryset().filter(status=ReservationStatus.IN_HOUSE, check_out_date=current_date)
         return self._get_paginated_response_for_qs(qs)
 
     @action(detail=False, methods=["get"], url_path="dashboard/checked-out")
     def checked_out(self, request):
-        """Ayrılanların Hepsi (Geçmiş işlemler, en son çıkan en üstte)"""
         qs = self.get_queryset().filter(status=ReservationStatus.CHECKED_OUT).order_by("-check_out_date")
         return self._get_paginated_response_for_qs(qs)
 
     @action(detail=False, methods=["get"], url_path="dashboard/cancelled")
     def cancelled_list(self, request):
-        """İptaller ve No-Show'lar (İşlemi başarısız olan geçmiş kayıtlar.)"""
         qs = self.get_queryset().filter(
             status__in=[ReservationStatus.CANCELLED, ReservationStatus.NO_SHOW]
         ).order_by("-updated_at")
@@ -120,29 +108,21 @@ class ReservationViewSet(viewsets.ModelViewSet): # ModelViewSet sınıfının ö
 
     @action(detail=False, methods=["get"], url_path="dashboard/all-records")
     def all_records(self, request):
-        """Tüm Veritabanı Dökümü (Genel Log ve Arama Listesi için)"""
         qs = self.get_queryset().order_by("-id")
         return self._get_paginated_response_for_qs(qs)
 
     @action(detail=False, methods=["get"], url_path="agency-choices")
     def get_agency_choices(self, request):
-        """Backend'deki ReservationAgency enum'ını dinamik olarak frontend'e servis eder."""
-        choices = [
-            {"value": key, "label": label}
-            for key, label in ReservationAgency.choices
-        ]
+        choices = [{"value": key, "label": label} for key, label in ReservationAgency.choices]
         return Response(choices)
 
-    
+
     # ==========================================
     # --- POST: SİSTEM VE RPC ACTION UÇLARI ---
     # ==========================================
 
     @action(detail=False, methods=["post"], url_path="night-audit")
     def trigger_night_audit(self, request):
-        """
-        Gecenin tetiklendiği Gün Sonu / Night Audit Endpointi
-        """
         try:
             result = NightAuditService.execute_end_of_day()
             return Response({
@@ -155,23 +135,22 @@ class ReservationViewSet(viewsets.ModelViewSet): # ModelViewSet sınıfının ö
 
     
     def _execute_service_action(self, pk, current_status, new_status):
-        """Statü Değişimlerinin Yan Etkilerini Servis Dosyasına Bildirir."""
         try:
-            reservation = ReservationActionService.process_state_transition( # yeni statüleri servis dosyası içinde oda state'lerini yöneten bileşene gönderir.
+            reservation = ReservationActionService.process_state_transition(
                 reservation_id=pk,
                 current_expected_status=current_status,
                 new_status=new_status
             )
-            return Response(self.get_serializer(reservation).data) # veri front'ende döner. (react renkleri state'leri ayarlar.)
-        except ValueError as e: # gelen veri biçimsel olarak doğru olsa bile, iş mantığına aykırı olabilir. Bunu yakalamak ve sebebini anlaşılır bir hata formatı olarak dönmek için valueError kullanırız.
+            return Response(self.get_serializer(reservation).data)
+        except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except ValidationError as e:
-            error_data = e.message_dict if hasattr(e, 'message_dict') else {"detail": list(e)} #! message_dict: çoklu hataları Django, message_dict adında özel bir dictionary formatında tutar.(birden fazla hata için çoklu dict yapısı). / hasattr(): hatada message_dict adında bir özellik var mı ona bakarız (defensive programming) / else detail: json formatında detayil olarak gönderilir.
+            error_data = e.message_dict if hasattr(e, 'message_dict') else {"detail": list(e)}
             return Response(error_data, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"], url_path="check-in")
-    def check_in(self, request, pk=None): #pk None atamaası defensive programming için: ID gönderilmezse çökmek yerine hata vermesini kodun devamında sağlarız.
-        return self._execute_service_action(pk, ReservationStatus.RESERVED, ReservationStatus.IN_HOUSE) # (pk, currentstatus, newstatus) servis fonksiyonuna gönderilir.
+    def check_in(self, request, pk=None):
+        return self._execute_service_action(pk, ReservationStatus.RESERVED, ReservationStatus.IN_HOUSE)
 
     @action(detail=True, methods=["post"], url_path="check-out")
     def check_out(self, request, pk=None):
@@ -183,5 +162,4 @@ class ReservationViewSet(viewsets.ModelViewSet): # ModelViewSet sınıfının ö
 
     @action(detail=False, methods=["get"], url_path="system-date")
     def get_system_date(self, request):
-        """Frontend'in otelin operasyonel gününü tek merkezden öğrenmesini sağlar."""
         return Response({"system_date": HotelSettings.get_current_date()})

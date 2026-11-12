@@ -19,6 +19,7 @@ class RoomStatus(models.TextChoices):
 class RoomType(models.Model):
     """
     Otel oda tipleri ve taban kapasite/fiyat tanımları.
+    (Rezervasyon sisteminin "booked_room_type" alanı buradan beslenir.)
     """
     name = models.CharField(max_length=100, unique=True, verbose_name="Oda Tipi Adı")
     code = models.CharField(max_length=10, unique=True, verbose_name="Oda Tipi Kodu", db_index=True)
@@ -32,6 +33,7 @@ class RoomType(models.Model):
     max_children = models.PositiveSmallIntegerField(default=1, verbose_name="Maksimum Çocuk")
     description = models.TextField(blank=True, null=True, verbose_name="Açıklama")
     is_active = models.BooleanField(default=True, verbose_name="Aktif mi?")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -56,6 +58,7 @@ class RoomType(models.Model):
 class Room(models.Model):
     """
     Fiziksel oda varlığı. Durum yönetimi ve kat yerleşimi içerir.
+    (Blokajlı rezervasyonların bağlandığı havuz nesnesi.)
     """
     room_number = models.CharField(
         max_length=20,
@@ -79,6 +82,7 @@ class Room(models.Model):
     )
     is_active = models.BooleanField(default=True, verbose_name="Kullanımda mı?")
     notes = models.TextField(blank=True, null=True, verbose_name="Oda Notları")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -88,7 +92,8 @@ class Room(models.Model):
         ordering = ["room_number"]
 
     def __str__(self) -> str:
-        return f"Oda {self.room_number} - {self.room_type.code} [{self.get_status_display()}]"  # type: ignore
+        status_label = self.get_status_display() if hasattr(self, "get_status_display") else self.status
+        return f"Oda {self.room_number} - {self.room_type.code} [{status_label}]"
 
     def clean(self) -> None:
         super().clean()

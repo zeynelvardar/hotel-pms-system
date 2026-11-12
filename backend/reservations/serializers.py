@@ -1,14 +1,14 @@
 """
 Rezervasyon modülünün okuma (Dashboard) ve yazma (Create/Update) serializer katmanıdır. 
-SoC ve DRY prensipleriyle; 1. misafir, 2. ve 3. misafirler (accompanying_guests),
-acenta (agency) ve çakışma önleyici atomik işlemler burada yönetilir.
+SoC ve DRY prensipleriyle; 1. misafir, ek misafirler (accompanying_guests),
+acenta (agency), oda blokaj (room) ve oda tipi (booked_room_type) işlemleri atomik olarak yönetilir.
 """
 
 from typing import Optional
 from rest_framework import serializers
 from django.db import transaction
-from .models import Reservation
-from rooms.models import Room
+from .models import Reservation, ReservationStatus
+from rooms.models import Room, RoomType
 from guests.models import Guest
 from guests.serializers import GuestSerializer
 
@@ -17,18 +17,25 @@ class DashboardReservationSerializer(serializers.ModelSerializer):
     """
     Resepsiyon panosu için optimize edilmiş salt-okunur (read-only) serializer.
     İlişkili verileri düzleştirerek (flatten) frontend'e hazır hale getirir.
+    Floating (Blokajsız) rezervasyonları destekler.
     """
     guest = GuestSerializer(read_only=True)
     guest_full_name = serializers.CharField(source="guest.__str__", read_only=True)
     guest_phone = serializers.CharField(source="guest.phone", read_only=True)
-    room_number = serializers.CharField(source="room.room_number", read_only=True)
-    room_type_code = serializers.CharField(source="room.room_type_code", read_only=True)
+    
+    # Blokaj (Fiziksel Oda) - Floating rezervasyonlarda null gelir
+    room_number = serializers.CharField(source="room.room_number", read_only=True, allow_null=True)
+    
+    # Satın Alınan Oda Tipi - Envanter ve Kapasite için zorunludur
+    booked_room_type_code = serializers.CharField(source="booked_room_type.code", read_only=True)
+    booked_room_type_name = serializers.CharField(source="booked_room_type.name", read_only=True)
+    
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     agency_display = serializers.CharField(source="get_agency_display", read_only=True)
 
     # N+1 olmadan çekilen Ek Misafirler listesi ve kişi sayısı
     accompanying_guests = GuestSerializer(many=True, read_only=True)
-    total_guest_count = serializers.SerializerMethodField()  # get_total_guest_count metodunu arar
+    total_guest_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Reservation
@@ -38,7 +45,8 @@ class DashboardReservationSerializer(serializers.ModelSerializer):
             "guest_full_name",
             "guest_phone",
             "room_number",
-            "room_type_code",
+            "booked_room_type_code",
+            "booked_room_type_name",
             "check_in_date",
             "check_out_date",
             "status",
@@ -58,16 +66,20 @@ class DashboardReservationSerializer(serializers.ModelSerializer):
 
 class ReservationCreateUpdateSerializer(serializers.ModelSerializer):
     """
-    Yeni rezervasyon oluşturulurken ve Rezervasyon Kartı güncellenirken, 
-    hem ana misafiri hem de ek misafirleri (nested) güvenle işleyen yazma serializer'ı.
+    Yeni rezervasyon oluşturulurken ve güncellenirken kullanılan yazma (write) serializer'ı.
+    Havuzda bekleyen (Floating/Blokajsız) rezervasyonları destekler.
     """
     guest = GuestSerializer(required=False)
     accompanying_guests = GuestSerializer(many=True, required=False)
 
-    # Frontend ile backend arasında oda gibi ilişkisel verileri ID'ler üzerinden konuşarak,
-    # güvenli ve hatasız birbirine bağlayan bir tercümandır.
+    # Satın alınan oda tipi (Kapasite ve fiyat için her zaman zorunludur)
+    booked_room_type_id = serializers.PrimaryKeyRelatedField(
+        queryset=RoomType.objects.all(), source="booked_room_type", required=True
+    )
+
+    # Fiziksel oda (Opsiyonel: Rezervasyon havuzda bekleyebilir, odaya atanmayabilir)
     room_id = serializers.PrimaryKeyRelatedField(
-        queryset=Room.objects.all(), source="room", required=False
+        queryset=Room.objects.all(), source="room", required=False, allow_null=True
     )
 
     total_price = serializers.DecimalField(
@@ -80,6 +92,7 @@ class ReservationCreateUpdateSerializer(serializers.ModelSerializer):
             "id",
             "guest",
             "accompanying_guests",
+            "booked_room_type_id",
             "room_id",
             "agency",
             "check_in_date",
@@ -90,8 +103,16 @@ class ReservationCreateUpdateSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs: dict) -> dict:
-        if "room" not in attrs and not self.instance:
-            raise serializers.ValidationError({"room": "Bir oda seçilmelidir"})
+        """PMS İş Kuralları (Business Logic) Doğrulamaları"""
+        status = attrs.get("status", getattr(self.instance, "status", ReservationStatus.RESERVED))
+        room = attrs.get("room", getattr(self.instance, "room", None))
+
+        # KURAL 1: İçeride konaklayan (IN_HOUSE) misafir havuzda (blokajsız) bırakılamaz.
+        if status == ReservationStatus.IN_HOUSE and not room:
+            raise serializers.ValidationError({
+                "room_id": "Konaklayan (IN_HOUSE) bir misafirin oda blokajı kaldırılamaz."
+            })
+            
         return attrs
 
     def _get_or_update_guests(self, guest_data: dict, is_main_guest: bool = False) -> Optional[Guest]:
@@ -127,25 +148,24 @@ class ReservationCreateUpdateSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data: dict) -> Reservation:
-        guest_data = validated_data.pop("guest", None)  # validated_data'dan misafir bilgisini söküp alıyoruz.
-        accompanying_guests_data = validated_data.pop("accompanying_guests", [])  # Beraberindeki misafirleri söküp alıyoruz.
+        guest_data = validated_data.pop("guest", None)
+        accompanying_guests_data = validated_data.pop("accompanying_guests", [])
 
         if not guest_data:
             raise serializers.ValidationError({"guest": "Ana misafir bilgileri eksiksiz girilmelidir."})
 
         # 1. Ana Misafiri İşle
         main_guest = self._get_or_update_guests(guest_data, is_main_guest=True)
-        validated_data["guest"] = main_guest  # Veritabanından aldığımız model nesnesini Foreign Key için geri koyar.
+        validated_data["guest"] = main_guest
 
-        # Rezervasyonu oluştur.
-        reservation = super().create(validated_data)  # create fonksiyonu çalıştıktan sonraki nesneyi reservation değişkenine atıyoruz.
+        # 2. Rezervasyonu oluştur (Fiziksel room_id null olabilir, sorun yok)
+        reservation = super().create(validated_data)
 
-        # 2. Ek Misafirleri İşle (varsa 2. ve 3. kişiler)
+        # 3. Ek Misafirleri İşle
         if accompanying_guests_data:
             acc_guests = []
             for acc_data in accompanying_guests_data:
                 acc_guest = self._get_or_update_guests(acc_data, is_main_guest=False)
-                # Aynı kişiyi hem 1. hem 2. misafir yapmasını engelle.
                 if acc_guest and acc_guest.id != main_guest.id:
                     acc_guests.append(acc_guest)
 
@@ -156,27 +176,26 @@ class ReservationCreateUpdateSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def update(self, instance: Reservation, validated_data: dict) -> Reservation:
-        guest_data = validated_data.pop("guest", None)  # guest anahtarını bul, guest_data değişkenine ata
+        guest_data = validated_data.pop("guest", None)
         accompanying_guests_data = validated_data.pop("accompanying_guests", None)
 
         # 1. Ana Misafiri Güncelle (veri geldiyse)
         if guest_data:
             main_guest = self._get_or_update_guests(guest_data, is_main_guest=True)
-            validated_data["guest"] = main_guest  # Güncellenen model nesnesi Foreign Key için validated_data içine geri koyulur.
+            validated_data["guest"] = main_guest
 
-        # Rezervasyon verilerini güncelle (Oda, Tarih, Acenta vb.)
+        # 2. Rezervasyon verilerini güncelle (Oda Blokajı dahil)
         reservation = super().update(instance, validated_data)
 
-        # 2. Ek Misafir Listesini Güncelle
+        # 3. Ek Misafir Listesini Güncelle
         if accompanying_guests_data is not None:
             acc_guests = []
             for acc_data in accompanying_guests_data:
                 acc_guest = self._get_or_update_guests(acc_data, is_main_guest=False)
-                # 2. kişi 1. kişi ile aynı mı kontrolü
                 if acc_guest and acc_guest.id != reservation.guest_id:
                     acc_guests.append(acc_guest)
 
-            # Listeyi yeniden set et (silinenler listeden düşer, yeniler eklenir)
+            # Listeyi tamamen yenile
             reservation.accompanying_guests.set(acc_guests)
 
         return reservation
