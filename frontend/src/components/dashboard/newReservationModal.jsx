@@ -6,16 +6,22 @@
  * 2. TCKN (Mod10) ve Pasaport algoritmik doğrulamalarını anlık yönetme.
  * 3. Tarih aralığına göre backend'den dinamik boş oda listesini çekme.
  * 4. Otel iş kurallarını (işletme kuralları, min/max tarihler, max 4 pax kısıtı) denetleme.
- * 5. Django REST Framework nested serializer mimarisine uygun payload üretip kaydetme (FLOATING).
+ * 5. Django REST Framework nested serializer mimarisine uygun payload üretip kaydetme (FLOATING DESTEKLİ).
  */
 
+// ============================================================================
+// 1. İÇE AKTARIMLAR (IMPORTS)
+// ============================================================================
 import { getNextDay, maskDateInput, parseMaskedDateToISO } from '../../utils/formatters';
 import { useState, useEffect, useMemo } from 'react';
-import { useAvailableRooms, useCreateReservation } from '../../hooks/useHotelData';
+import { useAvailableRooms, useCreateReservation, useRoomTypes } from '../../hooks/useHotelData';
 import { validateTCKN, validatePassport } from '../../utils/validators';
 import { X, CheckCircle2, XCircle, Loader2, PlusCircle, Trash2, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+// ============================================================================
+// 2. YARDIMCI VE FABRİKA (FACTORY) ŞABLONLARI
+// ============================================================================
 const emptyGuest = () => ({
     firstName: '',
     lastName: '',
@@ -25,58 +31,56 @@ const emptyGuest = () => ({
     gender: 'U'             
 });
 
+// ============================================================================
+// 3. ANA BİLEŞEN (COMPONENT)
+// ============================================================================
 const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
     const today = new Date().toLocaleDateString('en-CA');
     const tomorrow = getNextDay(today);
 
-    // ============================================================================
-    // 1. YEREL DURUMLAR (LOCAL STATES)
-    // ============================================================================
+    // ------------------------------------------------------------------------
+    // 3.1. YEREL DURUMLAR (LOCAL STATES)
+    // ------------------------------------------------------------------------
     const [formData, setFormData] = useState({
         checkIn: today,
         checkOut: tomorrow,
-        bookedRoomTypeId: '', // YENİ: Satın alınan oda tipi (ZORUNLU)
-        roomId: '',           // FİZİKSEL ODA BLOKAJI (OPSİYONEL - FLOATING)
+        bookedRoomTypeId: '', 
+        roomId: '',           
         agency: 'DIRECT',
         totalPrice: '',
         notes: ''
     });
     
     const [mainGuest, setMainGuest] = useState(emptyGuest());
-    const [mainIdentityStatus, setMainIdentityStatus] = useState(null);
+    const [mainIdentityStatus, setMainIdentityStatus] = useState(null); 
     const [extraGuests, setExtraGuests] = useState([]);
 
-    // ============================================================================
-    // 2. SUNUCU İLETİŞİMİ (SERVER HOOKS)
-    // ============================================================================
+    // ------------------------------------------------------------------------
+    // 3.2. SUNUCU İLETİŞİMİ (SERVER HOOKS)
+    // ------------------------------------------------------------------------
+    // YENİ: Oda Tiplerini (Kapasite) Bağımsız Çek
+    const { data: roomTypes, isLoading: isRoomTypesLoading } = useRoomTypes();
+    
     const { data: availableRooms, isLoading: isRoomsLoading } = useAvailableRooms(formData.checkIn, formData.checkOut);
     const createMutation = useCreateReservation(onClose);
 
-    // ============================================================================
-    // 3. TÜRETİLMİŞ DURUMLAR (DERIVED STATES FOR FLOATING LOGIC)
-    // ============================================================================
+    // ------------------------------------------------------------------------
+    // 3.3. TÜRETİLMİŞ DURUMLAR (DERIVED STATES FOR FLOATING LOGIC)
+    // ------------------------------------------------------------------------
     
-    // Müsait odalardan benzersiz Oda Tiplerini (Room Types) çıkarır
-    const availableRoomTypes = useMemo(() => {
-        if (!availableRooms) return [];
-        const typesMap = new Map();
-        availableRooms.forEach(room => {
-            if (room.room_type && !typesMap.has(room.room_type.id)) {
-                typesMap.set(room.room_type.id, room.room_type);
-            }
-        });
-        return Array.from(typesMap.values());
-    }, [availableRooms]);
-
-    // Seçilen Oda Tipine ait müsait fiziksel odaları filtreler
+    // Seçilen Oda Tipine ait müsait fiziksel odaları filtreler (Hem ID hem Obje formatına karşı dayanıklı)
     const filteredPhysicalRooms = useMemo(() => {
         if (!availableRooms || !formData.bookedRoomTypeId) return [];
-        return availableRooms.filter(room => String(room.room_type?.id) === String(formData.bookedRoomTypeId));
+        return availableRooms.filter(room => {
+            const typeId = room.room_type_id || (typeof room.room_type === 'object' ? room.room_type?.id : room.room_type);
+            return String(typeId) === String(formData.bookedRoomTypeId);
+        });
     }, [availableRooms, formData.bookedRoomTypeId]);
 
-    // ============================================================================
-    // 4. YAŞAM DÖNGÜSÜ VE SENKRONİZASYON (EFFECTS)
-    // ============================================================================
+    // ------------------------------------------------------------------------
+    // 3.4. YAŞAM DÖNGÜSÜ VE SENKRONİZASYON (EFFECTS)
+    // ------------------------------------------------------------------------
+    
     useEffect(() => {
         if (isOpen) {
             const currentToday = new Date().toLocaleDateString('en-CA');
@@ -112,6 +116,7 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
     useEffect(() => {
         if (!formData.checkIn) return;
         const expectedCheckOut = getNextDay(formData.checkIn);
+        
         if (!formData.checkOut || formData.checkOut <= formData.checkIn) {
             setFormData(prev => ({ ...prev, checkOut: expectedCheckOut }));
         }
@@ -129,9 +134,10 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
 
     if (!isOpen) return null;
 
-    // ============================================================================
-    // 5. OLAY İŞLEYİCİLERİ (HANDLERS)
-    // ============================================================================
+    // ------------------------------------------------------------------------
+    // 3.5. OLAY İŞLEYİCİLERİ (HANDLERS)
+    // ------------------------------------------------------------------------
+    
     const handleFormChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -175,17 +181,19 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
         });
     };
 
-    // ============================================================================
-    // 6. FORM GÖNDERİMİ (SUBMIT)
-    // ============================================================================
+    // ------------------------------------------------------------------------
+    // 3.6. FORM GÖNDERİMİ VE PAYLOAD OLUŞTURMA (SUBMIT)
+    // ------------------------------------------------------------------------
     const handleSubmit = (e) => {
         e.preventDefault();
         
+        // İş Kuralı 1: Geçersiz kimlik ile kayıt açılamaz
         if (mainIdentityStatus === "invalid") {
             toast.error('Lütfen ana misafir için geçerli bir kimlik giriniz.');
             return;
         }
         
+        // İş Kuralı 2: Oda tipi (Room Type) seçilmeden rezervasyon yapılamaz
         if (!formData.bookedRoomTypeId) {
             toast.error('Lütfen misafirin satın aldığı oda tipini seçiniz.');
             return;
@@ -196,7 +204,7 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
             last_name: mainGuest.lastName,
             tc_no: mainGuest.identityType === 'tc' ? mainGuest.identityNumber : null,
             passport_no: mainGuest.identityType === 'passport' ? mainGuest.identityNumber : null,
-            birth_date: parseMaskedDateToISO(mainGuest.birthDate),
+            birth_date: parseMaskedDateToISO(mainGuest.birthDate), 
             gender: mainGuest.gender
         };
 
@@ -211,11 +219,12 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
             }))
             .filter(eg => eg.first_name || eg.tc_no || eg.passport_no);
 
+        // Django REST Framework Nested Serializer (FLOATING UYUMLU)
         const payload = {
             guest: mainGuestPayload,
             accompanying_guests: extraGuestsPayload,
             booked_room_type_id: formData.bookedRoomTypeId, // ZORUNLU
-            room_id: formData.roomId || null,               // OPSİYONEL (FLOATING)
+            room_id: formData.roomId || null,               // OPSİYONEL (FLOATING DESTEKLİ)
             agency: formData.agency,
             check_in_date: formData.checkIn,
             check_out_date: formData.checkOut,
@@ -226,24 +235,26 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
         createMutation.mutate(payload);
     };
 
-    // ============================================================================
-    // 7. ARAYÜZ ÇİZİMİ (JSX RENDER)
-    // ============================================================================
+    // ========================================================================
+    // 4. ARAYÜZ ÇİZİMİ (JSX RENDER)
+    // ========================================================================
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl flex flex-col max-h-[90vh]">
 
+                {/* MODAL ÜST BAŞLIK */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50 rounded-t-2xl shrink-0">
                     <h2 className="text-lg font-bold text-slate-800">Yeni Rezervasyon Oluştur</h2>
-                    <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded-full transition cursor-pointer">
+                    <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded-full transition cursor-pointer" title="Kapat">
                         <X size={20} />
                     </button>
                 </div>
 
+                {/* MODAL GÖVDE ALANI */}
                 <div className="p-6 overflow-y-auto custom-scrollbar">
                     <form id="reservation-form" onSubmit={handleSubmit} className="space-y-8">
 
-                        {/* BÖLÜM 1: MİSAFİR BİLGİLERİ (Aynı Bırakıldı) */}
+                        {/* BÖLÜM 1: 1. ANA MİSAFİR */}
                         <div>
                             <h3 className="text-sm font-bold uppercase tracking-wider text-blue-600 mb-4 flex items-center gap-2">
                                 1. Ana Misafir (Kontrat Sahibi)
@@ -289,7 +300,7 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
                             </div>
                         </div>
 
-                        {/* BÖLÜM 2: EK MİSAFİRLER (Aynı Bırakıldı) */}
+                        {/* BÖLÜM 2: EK MİSAFİRLER */}
                         {extraGuests.length > 0 && (
                             <div>
                                 <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3 border-b border-slate-100 pb-2">
@@ -298,7 +309,7 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
                                 <div className="space-y-4">
                                     {extraGuests.map((eg, index) => (
                                         <div key={index} className="grid grid-cols-1 md:grid-cols-6 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg relative">
-                                            <button type="button" onClick={() => removeExtraGuest(index)} className="absolute -top-2 -right-2 bg-white text-rose-500 hover:text-rose-600 hover:bg-rose-50 p-1 rounded-full shadow-sm border border-slate-200 cursor-pointer transition"><Trash2 size={14} /></button>
+                                            <button type="button" onClick={() => removeExtraGuest(index)} className="absolute -top-2 -right-2 bg-white text-rose-500 hover:text-rose-600 hover:bg-rose-50 p-1 rounded-full shadow-sm border border-slate-200 cursor-pointer transition" title="Ek Misafiri Kaldır"><Trash2 size={14} /></button>
                                             <div className="col-span-2"><input type="text" name="firstName" value={eg.firstName} onChange={(e) => handleExtraGuestChange(index, e)} placeholder="Ad" className="w-full border border-slate-300 rounded p-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none" /></div>
                                             <div className="col-span-2"><input type="text" name="lastName" value={eg.lastName} onChange={(e) => handleExtraGuestChange(index, e)} placeholder="Soyad" className="w-full border border-slate-300 rounded p-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none" /></div>
                                             <div className="col-span-2 flex gap-2">
@@ -318,6 +329,7 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
                                 </div>
                             </div>
                         )}
+
                         <div>
                             <button type="button" onClick={addExtraGuest} disabled={extraGuests.length >= 3} className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition disabled:opacity-50 cursor-pointer">
                                 <PlusCircle size={14} /> Opsiyonel Ek Misafir Ekle
@@ -325,7 +337,7 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
                         </div>
                         <hr className="border-slate-100"/>
 
-                        {/* BÖLÜM 3: ODA TİPİ VE KONAKLAMA BİLGİLERİ (FLOATING/BLOKAJSIZ DESTEKLİ) */}
+                        {/* BÖLÜM 3: ODA TİPİ, FİZİKSEL ODA VE KONAKLAMA BİLGİLERİ */}
                         <div>
                             <h3 className="text-sm font-bold uppercase tracking-wider text-blue-600 mb-4">
                                 Konaklama Bilgileri
@@ -362,22 +374,22 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
                                     <input type="number" step="0.01" name="totalPrice" value={formData.totalPrice} onChange={handleFormChange} placeholder="0.00" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold" />
                                 </div>
 
-                                {/* YENİ: Oda Tipi Seçimi (ZORUNLU) */}
+                                {/* ODA TİPİ SEÇİMİ (ZORUNLU & DOĞRUDAN API'DEN GELİR) */}
                                 <div className="md:col-span-2">
                                     <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
                                         <span>Satın Alınan Oda Tipi</span>
-                                        {isRoomsLoading && <Loader2 size={12} className="animate-spin text-blue-500" />}
+                                        {isRoomTypesLoading && <Loader2 size={12} className="animate-spin text-blue-500" />}
                                     </label>
                                     <select 
                                         required 
                                         name="bookedRoomTypeId" 
                                         value={formData.bookedRoomTypeId} 
                                         onChange={handleFormChange} 
-                                        disabled={isRoomsLoading || !availableRoomTypes.length} 
+                                        disabled={isRoomTypesLoading || !roomTypes?.length} 
                                         className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white disabled:bg-slate-100 disabled:text-slate-400"
                                     >
                                         <option value="">Oda Tipi Seçiniz...</option>
-                                        {availableRoomTypes.map(rt => (
+                                        {roomTypes?.map(rt => (
                                             <option key={rt.id} value={rt.id}>
                                                 {rt.name} ({rt.code})
                                             </option>
@@ -385,9 +397,12 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
                                     </select>
                                 </div>
 
-                                {/* YENİ: Fiziksel Oda Seçimi (OPSİYONEL - FLOATING) */}
+                                {/* FİZİKSEL ODA SEÇİMİ (OPSİYONEL - FLOATING) */}
                                 <div className="md:col-span-2">
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Fiziksel Oda (Opsiyonel / Blokaj)</label>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
+                                        <span>Fiziksel Oda (Opsiyonel / Blokaj)</span>
+                                        {isRoomsLoading && <Loader2 size={12} className="animate-spin text-blue-500" />}
+                                    </label>
                                     <select 
                                         name="roomId" 
                                         value={formData.roomId} 
@@ -404,11 +419,12 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
                                     </select>
                                 </div>
                                 
+                                {/* Bilgi Kutusu */}
                                 <div className="md:col-span-4 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
                                     <Info size={16} className="text-amber-600 shrink-0 mt-0.5" />
                                     <p className="text-[11px] text-amber-700 leading-relaxed font-medium">
-                                        Fiziksel oda seçmek zorunlu değildir. Sadece "Oda Tipi" belirleyerek rezervasyonu 
-                                        <strong> blokajsız (havuzda)</strong> açabilirsiniz. Fiziksel odayı misafir giriş (check-in) yapmadan önce atayabilirsiniz.
+                                        Fiziksel oda seçmek zorunlu değildir. İstenilen "Oda Tipi"ni belirleyerek rezervasyonu 
+                                        <strong> blokajsız (havuzda)</strong> açabilirsiniz. Fiziksel odayı daha sonra atayabilirsiniz.
                                     </p>
                                 </div>
 
@@ -421,6 +437,7 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
                     </form>
                 </div>
 
+                {/* MODAL ALT PANEL (FOOTER) */}
                 <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3 rounded-b-2xl shrink-0">
                     <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition cursor-pointer">
                         İptal

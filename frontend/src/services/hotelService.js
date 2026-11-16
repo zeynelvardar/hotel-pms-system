@@ -33,6 +33,11 @@ export const hotelService = { // büyük bir nesne
         const response = await api.patch(`rooms/${roomId}/change-status/`, { status });
         return response.data;
     },
+    
+    getRoomTypes: async () => {
+        const response = await api.get('room-types/');
+        return extractData(response);
+    },
 
     // ==========================================
     // 2. DASHBOARD OPERASYON PANOSU UÇLARI (Sistem Gününe Bağlı)

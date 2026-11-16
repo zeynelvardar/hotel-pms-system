@@ -57,6 +57,14 @@ export const useChangeRoomStatus = () => {
     });
 };
 
+export const useRoomTypes = () => {
+    return useQuery({
+        queryKey: ['roomTypes'],
+        queryFn: hotelService.getRoomTypes,
+        staleTime: 1000 * 60 * 60 * 24, // 24 saat taze kalır. 
+    });
+};
+
 
 // ==========================================
 // 2. DASHBOARD (OPERASYON PANOSU) HOOK'LARI
