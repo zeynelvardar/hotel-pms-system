@@ -7,6 +7,7 @@
  * 3. Tarih aralığına göre backend'den dinamik boş oda listesini çekme.
  * 4. Otel iş kurallarını (işletme kuralları, min/max tarihler, max 4 pax kısıtı) denetleme.
  * 5. Django REST Framework nested serializer mimarisine uygun payload üretip kaydetme (FLOATING DESTEKLİ).
+ * 6. (YENİ) Fiziksel Oda seçimini RoomAssignmentModal aracılığıyla DRY prensibine uygun yapar.
  */
 
 // ============================================================================
@@ -14,10 +15,11 @@
 // ============================================================================
 import { getNextDay, maskDateInput, parseMaskedDateToISO } from '../../utils/formatters';
 import { useState, useEffect, useMemo } from 'react';
-import { useAvailableRooms, useCreateReservation, useRoomTypes } from '../../hooks/useHotelData';
+import { useCreateReservation, useRoomTypes } from '../../hooks/useHotelData';
 import { validateTCKN, validatePassport } from '../../utils/validators';
-import { X, CheckCircle2, XCircle, Loader2, PlusCircle, Trash2, Info } from 'lucide-react';
+import { X, CheckCircle2, XCircle, Loader2, PlusCircle, Trash2, Info, DoorOpen } from 'lucide-react';
 import toast from 'react-hot-toast';
+import RoomAssignmentModal from './RoomAssignmentModal';
 
 // ============================================================================
 // 2. YARDIMCI VE FABRİKA (FACTORY) ŞABLONLARI
@@ -45,7 +47,8 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
         checkIn: today,
         checkOut: tomorrow,
         bookedRoomTypeId: '', 
-        roomId: '',           
+        roomId: initialRoomId ? String(initialRoomId) : '',           
+        _displayRoomNumber: null, // YENİ: Seçilen oda numarasını ekranda göstermek için
         agency: 'DIRECT',
         totalPrice: '',
         notes: ''
@@ -54,28 +57,33 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
     const [mainGuest, setMainGuest] = useState(emptyGuest());
     const [mainIdentityStatus, setMainIdentityStatus] = useState(null); 
     const [extraGuests, setExtraGuests] = useState([]);
+    
+    // YENİ: Ortak Blokaj Modalı'nın açık/kapalı durumu
+    const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
 
     // ------------------------------------------------------------------------
     // 3.2. SUNUCU İLETİŞİMİ (SERVER HOOKS)
     // ------------------------------------------------------------------------
-    // YENİ: Oda Tiplerini (Kapasite) Bağımsız Çek
     const { data: roomTypes, isLoading: isRoomTypesLoading } = useRoomTypes();
-    
-    const { data: availableRooms, isLoading: isRoomsLoading } = useAvailableRooms(formData.checkIn, formData.checkOut);
     const createMutation = useCreateReservation(onClose);
 
     // ------------------------------------------------------------------------
-    // 3.3. TÜRETİLMİŞ DURUMLAR (DERIVED STATES FOR FLOATING LOGIC)
+    // 3.3. TÜRETİLMİŞ DURUMLAR (DERIVED STATES)
     // ------------------------------------------------------------------------
-    
-    // Seçilen Oda Tipine ait müsait fiziksel odaları filtreler (Hem ID hem Obje formatına karşı dayanıklı)
-    const filteredPhysicalRooms = useMemo(() => {
-        if (!availableRooms || !formData.bookedRoomTypeId) return [];
-        return availableRooms.filter(room => {
-            const typeId = room.room_type_id || (typeof room.room_type === 'object' ? room.room_type?.id : room.room_type);
-            return String(typeId) === String(formData.bookedRoomTypeId);
-        });
-    }, [availableRooms, formData.bookedRoomTypeId]);
+    // Seçili Oda Tipinin Kodunu (örn: 'STD') bulur. RoomAssignmentModal'a prop olarak göndermek için.
+    const selectedRoomTypeCode = useMemo(() => {
+        if (!formData.bookedRoomTypeId || !roomTypes) return null;
+        const matchedType = roomTypes.find(rt => String(rt.id) === String(formData.bookedRoomTypeId));
+        return matchedType ? matchedType.code : null;
+    }, [formData.bookedRoomTypeId, roomTypes]);
+
+    // UI Koruması: ID varsa veya ekranda numarası gösteriliyorsa oda atanmıştır
+    const getRoomLabel = () => {
+        if (formData.roomId || formData._displayRoomNumber) {
+            return formData._displayRoomNumber ? `${formData._displayRoomNumber} Numaralı Oda` : "Oda Seçildi";
+        }
+        return "Blokajsız Beklet (Havuz)";
+    };
 
     // ------------------------------------------------------------------------
     // 3.4. YAŞAM DÖNGÜSÜ VE SENKRONİZASYON (EFFECTS)
@@ -91,6 +99,7 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
                 checkOut: currentTomorrow,
                 bookedRoomTypeId: '',
                 roomId: initialRoomId ? String(initialRoomId) : '',
+                _displayRoomNumber: null,
                 agency: 'DIRECT',
                 totalPrice: '',
                 notes: '',
@@ -98,6 +107,7 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
             setMainGuest(emptyGuest());
             setMainIdentityStatus(null);
             setExtraGuests([]);
+            setIsRoomModalOpen(false);
         }
     }, [isOpen, initialRoomId]);
 
@@ -122,15 +132,13 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
         }
     }, [formData.checkIn]);
 
-    // Oda Tipi değiştiğinde, eğer önceden seçili fiziksel oda varsa ve yeni tipe uymuyorsa sıfırla
+    // Oda Tipi değiştiğinde, eğer önceden seçili fiziksel oda varsa onu sıfırla (Uyumsuzluk olmaması için)
     useEffect(() => {
-        if (formData.roomId && filteredPhysicalRooms.length > 0) {
-            const isRoomStillValid = filteredPhysicalRooms.some(r => String(r.id) === String(formData.roomId));
-            if (!isRoomStillValid) {
-                setFormData(prev => ({ ...prev, roomId: '' }));
-            }
+        if (formData.roomId && formData.bookedRoomTypeId) {
+            setFormData(prev => ({ ...prev, roomId: '', _displayRoomNumber: null }));
         }
-    }, [formData.bookedRoomTypeId, filteredPhysicalRooms, formData.roomId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formData.bookedRoomTypeId]);
 
     if (!isOpen) return null;
 
@@ -179,6 +187,15 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
             updated[index] = { ...updated[index], birthDate: maskDateInput(e.target.value) };
             return updated;
         });
+    };
+
+    // YENİ: RoomAssignmentModal'dan gelen atama işlemini yakalar
+    const handleRoomAssign = (newRoomId, newRoomNumber) => {
+        setFormData(prev => ({ 
+            ...prev, 
+            roomId: newRoomId, 
+            _displayRoomNumber: newRoomNumber 
+        }));
     };
 
     // ------------------------------------------------------------------------
@@ -374,7 +391,7 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
                                     <input type="number" step="0.01" name="totalPrice" value={formData.totalPrice} onChange={handleFormChange} placeholder="0.00" className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold" />
                                 </div>
 
-                                {/* ODA TİPİ SEÇİMİ (ZORUNLU & DOĞRUDAN API'DEN GELİR) */}
+                                {/* ODA TİPİ SEÇİMİ (ZORUNLU) */}
                                 <div className="md:col-span-2">
                                     <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
                                         <span>Satın Alınan Oda Tipi</span>
@@ -397,26 +414,32 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
                                     </select>
                                 </div>
 
-                                {/* FİZİKSEL ODA SEÇİMİ (OPSİYONEL - FLOATING) */}
+                                {/* FİZİKSEL ODA SEÇİMİ (YENİ UX: BUTON İLE MODAL TETİKLEME) */}
                                 <div className="md:col-span-2">
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
-                                        <span>Fiziksel Oda (Opsiyonel / Blokaj)</span>
-                                        {isRoomsLoading && <Loader2 size={12} className="animate-spin text-blue-500" />}
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                                        Fiziksel Oda (Opsiyonel / Blokaj)
                                     </label>
-                                    <select 
-                                        name="roomId" 
-                                        value={formData.roomId} 
-                                        onChange={handleFormChange} 
-                                        disabled={!formData.bookedRoomTypeId || isRoomsLoading || !filteredPhysicalRooms.length} 
-                                        className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white disabled:bg-slate-100 disabled:text-slate-400"
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsRoomModalOpen(true)}
+                                        disabled={!formData.bookedRoomTypeId}
+                                        className={`w-full flex items-center justify-between p-2 text-sm border rounded-lg transition-colors outline-none
+                                            ${!formData.bookedRoomTypeId 
+                                                ? 'bg-slate-100 border-slate-300 text-slate-400 cursor-not-allowed' 
+                                                : formData.roomId 
+                                                    ? 'bg-blue-50 border-blue-400 text-blue-700 font-bold hover:bg-blue-100 cursor-pointer shadow-sm'
+                                                    : 'bg-white border-slate-300 text-slate-700 hover:border-blue-400 hover:bg-slate-50 cursor-pointer'
+                                            }`}
+                                        title={!formData.bookedRoomTypeId ? "Oda seçimi için önce Oda Tipini belirlemelisiniz" : "Oda Seçim Ekranını Aç"}
                                     >
-                                        <option value="">Blokajsız Beklet (Havuz)</option>
-                                        {filteredPhysicalRooms.map(r => (
-                                            <option key={r.id} value={r.id}>
-                                                Oda {r.room_number} 
-                                            </option>
-                                        ))}
-                                    </select>
+                                        <span className="flex items-center gap-2">
+                                            <DoorOpen size={16} className={formData.roomId ? 'text-blue-600' : 'text-slate-400'} />
+                                            {getRoomLabel()}
+                                        </span>
+                                        <span className="text-xs font-bold bg-slate-200 text-slate-600 px-2 py-0.5 rounded">
+                                            Seç / Değiştir
+                                        </span>
+                                    </button>
                                 </div>
                                 
                                 {/* Bilgi Kutusu */}
@@ -452,6 +475,20 @@ const NewReservationModal = ({ isOpen, onClose, initialRoomId = null }) => {
                         Kaydet
                     </button>
                 </div>
+
+                {/* YENİ: ORTAK ROOM ASSIGNMENT MODAL ENTEGRASYONU */}
+                {isRoomModalOpen && (
+                    <RoomAssignmentModal
+                        isOpen={isRoomModalOpen}
+                        onClose={() => setIsRoomModalOpen(false)}
+                        onAssign={handleRoomAssign}
+                        checkIn={formData.checkIn}
+                        checkOut={formData.checkOut}
+                        currentRoomId={formData.roomId}
+                        reservationStatus="RESERVED" // Yeni rezervasyon her zaman Reserved'dir
+                        bookedRoomTypeCode={selectedRoomTypeCode}
+                    />
+                )}
 
             </div>
         </div>
