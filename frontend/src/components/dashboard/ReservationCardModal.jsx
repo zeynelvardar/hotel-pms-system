@@ -1,19 +1,21 @@
 /**
  * ReservationCardModal (Stay Card)
- * Rezervasyonun kontrat (tarih, acenta, fiyat, not) detaylarını yönetir.
+ * Rezervasyonun kontrat (tarih, acenta, fiyat, not, ODA BLOKAJI) detaylarını yönetir.
  * Odadaki misafirleri listeler ve çift tıklamayla GuestCardModal'ı tetikler.
  * 
  * Mimari Güvenceler:
  * 1. Rules of Hooks: Tüm hook ve useMemo çağrıları erken return'den önce çalışır.
  * 2. Derived State: allGuests ve selectedGuest ID üzerinden doğrudan türetilir.
  * 3. Form Shield: isEditing aktifken arka plan sorguları formu sıfırlamaz.
+ * 4. Room Modal Shield: Oda seçimi form state'inde tutulur, 'Kaydet' basılana kadar backend'e gitmez.
  */
 
 import { useState, useEffect, useMemo } from 'react';
 import { getNextDay } from '../../utils/formatters';
 import { useUpdateReservation, useReservationAction, useAgencyChoices } from '../../hooks/useHotelData';
-import { X, Save, Users, Calendar, Building, CreditCard, FileText, Ban, Loader2 } from 'lucide-react';
+import { X, Save, Users, Calendar, Building, CreditCard, FileText, Ban, Loader2, DoorOpen } from 'lucide-react';
 import GuestCardModal from './GuestCardModal';
+import RoomAssignmentModal from './RoomAssignmentModal';
 
 const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
     // ==========================================
@@ -22,9 +24,10 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
     const [formData, setFormData] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     
-    // Alt Modal (Misafir Kartı) ID Takibi
+    // Alt Modallar
     const [selectedGuestId, setSelectedGuestId] = useState(null);
     const [isGuestCardOpen, setIsGuestCardOpen] = useState(false);
+    const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
 
     // ==========================================
     // 2. SUNUCU SORGULARI VE MUTASYONLAR
@@ -40,7 +43,6 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
     // ==========================================
     // 3. TÜRETİLMİŞ DURUMLAR (HOOK SIRASI KORUMASI)
     // ==========================================
-    // Erken return'den (early return) önce çalışmak zorundadır
     const allGuests = useMemo(() => {
         if (!reservationData) return [];
         return [
@@ -59,7 +61,6 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
     // ==========================================
     useEffect(() => {
         if (isOpen && reservationData) {
-            // Arka plandaki invalidateQueries tetiklendiğinde kullanıcının yazdıklarını ezme
             if (!isEditing) {
                 setFormData({
                     id: reservationData.id,
@@ -68,13 +69,19 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
                     agency: reservationData.agency || 'DIRECT',
                     totalPrice: reservationData.total_price || '',
                     notes: reservationData.notes || '',
-                    status: reservationData.status
+                    status: reservationData.status,
+                    roomId: reservationData.room_id || null, // Seçili oda (null ise blokajsız)
+                    
+                    // Gösterim (Display) amaçlı salt-okunur alanlar (Backend'e gitmez)
+                    _displayRoomNumber: reservationData.room_number,
+                    _displayRoomTypeCode: reservationData.booked_room_type_code
                 });
             }
         } else if (!isOpen) {
             setIsEditing(false);
             setSelectedGuestId(null);
             setIsGuestCardOpen(false);
+            setIsRoomModalOpen(false);
         }
     }, [isOpen, reservationData, isEditing]);
 
@@ -89,12 +96,32 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
     const isReadOnly = ['CHECKED_OUT', 'CANCELLED', 'NO_SHOW'].includes(formData.status);
     const isCheckInLocked = formData.status === 'IN_HOUSE';
 
+    // Oda Bilgisi Etiketini Üret
+    const getRoomLabel = () => {
+        if (formData.roomId) {
+            // Eğer formda bir oda numarası henüz yoksa (yeni atandıysa ve save edilmediyse) 
+            // "Yeni Oda Atandı" yazarız, çünkü numarayı ancak listeyi gezip bulabilirdik.
+            return formData._displayRoomNumber ? `${formData._displayRoomNumber} Numaralı Oda` : "Yeni Oda Seçildi";
+        }
+        return `Blokajsız Bekliyor (${formData._displayRoomTypeCode})`;
+    };
+
     // ==========================================
     // 7. AKSİYON İŞLEYİCİLER (HANDLERS)
     // ==========================================
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleRoomAssign = (newRoomId) => {
+        setFormData(prev => ({ 
+            ...prev, 
+            roomId: newRoomId, 
+            // Yeni oda atanırsa (veya iptal edilirse) eski numara ekranda kalmasın diye temizliyoruz. 
+            // Kaydedildiğinde zaten parent component yeniden güncel reservationData gönderecek.
+            _displayRoomNumber: null 
+        }));
     };
 
     const handleCancelEdit = () => {
@@ -105,7 +132,10 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
             agency: reservationData.agency || 'DIRECT',
             totalPrice: reservationData.total_price || '',
             notes: reservationData.notes || '',
-            status: reservationData.status
+            status: reservationData.status,
+            roomId: reservationData.room_id || null,
+            _displayRoomNumber: reservationData.room_number,
+            _displayRoomTypeCode: reservationData.booked_room_type_code
         });
         setIsEditing(false);
     };
@@ -117,7 +147,8 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
             check_out_date: formData.checkOut,
             agency: formData.agency,
             total_price: formData.totalPrice || '0.00',
-            notes: formData.notes
+            notes: formData.notes,
+            room_id: formData.roomId // Frontend API, DRF backend'ine null gönderebilir (Blokajsız)
         };
         updateMutation.mutate({ id: formData.id, data: payload });
     };
@@ -151,9 +182,28 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
                                 Ref: #{formData.id}
                             </span>
                         </h2>
-                        <p className="text-xs text-slate-300 mt-1 opacity-80">
-                            {reservationData.room_number} Numaralı Oda | Statü: {reservationData.status_display}
-                        </p>
+                        
+                        {/* Dinamik Oda Gösterimi ve Atama Aksiyonu */}
+                        <div className="flex items-center gap-2 mt-1.5">
+                            <button
+                                type="button"
+                                onClick={() => isEditing && setIsRoomModalOpen(true)}
+                                disabled={!isEditing || isReadOnly}
+                                className={`text-[11px] font-bold px-2 py-0.5 rounded border transition-colors flex items-center gap-1
+                                    ${!formData.roomId 
+                                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' 
+                                        : 'bg-blue-500/20 text-blue-300 border-blue-500/50'}
+                                    ${isEditing && !isReadOnly ? 'cursor-pointer hover:bg-slate-700 hover:border-slate-400' : 'cursor-default'}
+                                `}
+                                title={isEditing && !isReadOnly ? "Oda blokajını değiştirmek için tıklayın" : ""}
+                            >
+                                <DoorOpen size={12} />
+                                {getRoomLabel()}
+                            </button>
+                            <span className="text-xs text-slate-300 opacity-80">
+                                • Statü: {reservationData.status_display}
+                            </span>
+                        </div>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-slate-700 rounded-full transition cursor-pointer">
                         <X size={20} />
@@ -270,7 +320,7 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
                                         className="flex items-center gap-1.5 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-2 rounded-lg transition cursor-pointer disabled:opacity-50"
                                     >
                                         {isCancelling ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />} 
-                                        Rezervasyonu İptal Et
+                                        İptal Et
                                     </button>
                                 )}
                                 
@@ -353,7 +403,7 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
                 </div>
             </div>
             
-            {/* Alt Modal: GuestCardModal */}
+            {/* Alt Modallar */}
             {isGuestCardOpen && selectedGuest && (
                 <GuestCardModal
                     isOpen={isGuestCardOpen}
@@ -365,6 +415,19 @@ const ReservationCardModal = ({ isOpen, onClose, reservationData }) => {
                     isReadOnly={isReadOnly}
                 />
             )} 
+
+            {isRoomModalOpen && (
+                <RoomAssignmentModal
+                    isOpen={isRoomModalOpen}
+                    onClose={() => setIsRoomModalOpen(false)}
+                    onAssign={handleRoomAssign}
+                    checkIn={formData.checkIn}
+                    checkOut={formData.checkOut}
+                    currentRoomId={formData.roomId}
+                    reservationStatus={formData.status}
+                    bookedRoomTypeCode={formData._displayRoomTypeCode}
+                />
+            )}
         </div>
     );
 };
