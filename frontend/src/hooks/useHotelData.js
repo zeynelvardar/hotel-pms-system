@@ -100,6 +100,7 @@ export const useCreateReservation = (onSuccessCallBack) => { // parametre react 
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             queryClient.invalidateQueries({ queryKey: ['roomRack'] });
+            queryClient.invalidateQueries({ queryKey: ['availableRooms'] });
             toast.success('Rezervasyon başarıyla oluşturuldu.');
             if (onSuccessCallBack) onSuccessCallBack(); // callback true ise callback'i çalıştı (onclose) modal'ı kapat. (neden burada?: eğer modal direkt kapanırsa ve işlem başarısız olursa kullanıcı bunu göremez.)
         },
@@ -117,7 +118,8 @@ export const useUpdateReservation = (onSuccessCallBack) => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             queryClient.invalidateQueries({ queryKey: ['roomRack'] });
-            toast.success('Rezervasyon güncellendi.')
+            queryClient.invalidateQueries({ queryKey: ['availableRooms'] });
+            toast.success('Rezervasyon güncellendi.');
             if (onSuccessCallBack) onSuccessCallBack();
         },
         onError: (error) => toast.error(error.response?.data?.detail || 'Güncelleme başarısız.')

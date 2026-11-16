@@ -44,6 +44,7 @@ class DashboardReservationSerializer(serializers.ModelSerializer):
             "guest",
             "guest_full_name",
             "guest_phone",
+            "room_id",
             "room_number",
             "booked_room_type_code",
             "booked_room_type_name",

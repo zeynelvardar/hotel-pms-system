@@ -133,6 +133,7 @@ class RoomViewSet(viewsets.ModelViewSet):
         # Çakışma Kuralı: (Res.CheckIn < Talep.CheckOut) ve (Res.CheckOut > Talep.CheckIn)
         conflicting_room_ids = Reservation.objects.filter(
             status__in=[ReservationStatus.RESERVED, ReservationStatus.IN_HOUSE],
+            room__isnull=False,
             check_in_date__lt=check_out,
             check_out_date__gt=check_in,
         ).values_list("room_id", flat=True)
