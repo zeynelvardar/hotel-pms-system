@@ -5,6 +5,7 @@
  */
 
 import { useState, useMemo } from 'react';
+import toast from 'react-hot-toast';
 import NewReservationModal from '../components/dashboard/NewReservationModal';
 import ReservationTable from '../components/dashboard/ReservationTable';
 import ReservationCardModal from '../components/dashboard/ReservationCardModal';
@@ -15,7 +16,7 @@ import {
 } from '../hooks/useHotelData';
 import {
   LogIn, LogOut, Users, RefreshCw, Plus, CalendarDays,
-  Calendar, History, Ban, Database, CheckSquare, MoonStar
+  Calendar, History, Ban, Database, CheckSquare, MoonStar, AlertTriangle
 } from 'lucide-react';
 import { formatDate } from '../utils/formatters';
 
@@ -30,7 +31,7 @@ const Dashboard = () => {
   const [selectedReservationId, setSelectedReservationId] = useState(null);
   const [isReservationCardOpen, setIsReservationCardOpen] = useState(false);
 
-  const { data: systemDate, isDateLoading } = useSystemDate();
+  const { data: systemDate, isLoading: isDateLoading } = useSystemDate();
 
   // ==========================================
   // 2. SUNUCU VERİLERİ (TANSTACK QUERY)
@@ -53,7 +54,7 @@ const Dashboard = () => {
   // ==========================================
   // 3. TÜRETİLMİŞ DURUM (DERIVED STATE)
   // ==========================================
-  // activeData tanımlandıktan sonra hafızadaki güncel nesneyi bulur
+  // Arka plan sorguları yenilendiğinde açık karttaki verinin bayatlamasını önler
   const selectedReservation = useMemo(() => {
     if (!selectedReservationId || !activeData?.data) return null;
     const list = Array.isArray(activeData.data) ? activeData.data : activeData.data.results || [];
@@ -78,8 +79,66 @@ const Dashboard = () => {
   // 5. AKSİYON İŞLEYİCİLER (HANDLERS)
   // ==========================================
   const handleNightAudit = () => {
-    const isConfirmed = window.confirm("DİKKAT: Gün Sonu (Night Audit) işlemi başlatılacak. Dünden kalan gelmemiş misafirler No-Show olarak işaretlenecek ve sistem günü bir sonraki güne atlayacaktır. Onaylıyor musunuz?");
-    if (isConfirmed) runNightAudit();
+    if (isAuditPending) return;
+
+    toast.custom(
+      (t) => (
+        <div
+          className={`max-w-md w-full bg-white shadow-2xl rounded-2xl pointer-events-auto border border-slate-200 overflow-hidden transition-all duration-200 ${
+            t.visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-2 scale-95'
+          }`}
+        >
+          <div className="p-4 flex items-start gap-3.5">
+            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 shrink-0">
+              <AlertTriangle size={20} />
+            </div>
+
+            <div className="flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-slate-800">
+                  Gün Sonu (Night Audit) Onayı
+                </h3>
+                {systemDate && (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                    {formatDate(systemDate)}
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                Dünden kalan gelmemiş misafirler <strong className="text-rose-600">No-Show</strong> olarak işaretlenecek ve sistem günü bir sonraki güne atlayacaktır. Onaylıyor musunuz?
+              </p>
+            </div>
+          </div>
+
+          <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => toast.dismiss(t.id)}
+              className="px-3.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200/70 rounded-lg transition cursor-pointer"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                toast.dismiss(t.id);
+                runNightAudit();
+              }}
+              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-lg shadow-sm transition cursor-pointer"
+            >
+              <MoonStar size={14} />
+              Onayla ve Başlat
+            </button>
+          </div>
+        </div>
+      ),
+      {
+        id: 'night-audit-confirm', // Aynı anda birden fazla onay kutusu açılmasını engeller
+        duration: Infinity,         // Kullanıcı karar verene kadar ekranda kalır
+        position: 'top-center',
+      }
+    );
   };
 
   const handleRowDoubleClick = (reservation) => {
