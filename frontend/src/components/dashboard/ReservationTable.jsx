@@ -1,7 +1,7 @@
 /**
  * Ön Büro Rezervasyon Dashboardu Tablo Bileşeni
  * Gelen sekme tipine (type) ve rezervasyon statüsüne (status) göre
- * Check-in, Check-out gibi operasyonel butonları güvenli bir şekilde render eder.
+ * Check-in, Check-out ve Hızlı Oda Blokajı / Room Move aksiyonlarını yönetir.
  * Elektra Web tarzı sütun bazlı anlık arama/filtreleme ve akıllı sıralama destekler.
  */
 
@@ -11,10 +11,22 @@
 import { useState, useMemo } from 'react';
 import { formatDate, maskDateInput } from '../../utils/formatters';
 import { 
-    Calendar, BedDouble, User, Loader2, Users, Building, 
+    Calendar, BedDouble, User, Loader2, Users, Building, KeyRound,
     ArrowUpDown, ArrowUp, ArrowDown, LogIn, LogOut, CheckCircle2, Search, X 
 } from 'lucide-react';
 import { useReservationAction, useSystemDate } from '../../hooks/useHotelData';
+
+// Housekeeping statü rozet stilleri (DRY)
+const ROOM_STATUS_BADGE = {
+    VC: 'bg-emerald-50 text-emerald-600 border-emerald-200',
+    VD: 'bg-rose-50 text-rose-600 border-rose-200',
+    OC: 'bg-blue-50 text-blue-600 border-blue-200',
+    OD: 'bg-amber-50 text-amber-600 border-amber-200',
+    OOO: 'bg-slate-200 text-slate-700 border-slate-300',
+};
+
+// Aktif oda blokajı yapılabilen rezervasyon statüleri
+const ASSIGNABLE_STATUSES = ['RESERVED', 'IN_HOUSE'];
 
 // ==========================================
 // 2. YARDIMCI BİLEŞEN: SÜTUN BAŞLIĞI VE FİLTRE KUTUSU
@@ -22,10 +34,11 @@ import { useReservationAction, useSystemDate } from '../../hooks/useHotelData';
 // DİKKAT (Senior Note): Bu bileşen ana bileşenin DIŞINDA tanımlanmalıdır. 
 // Aksi takdirde React her render'da input'u yeniden oluşturur ve klavye odağı (focus) kaybolur!
 const SortableHeaderWithFilter = ({ 
-    sortKey, label, filterKey, filters, sortConfig, onSort, onFilterChange, isDate 
+    sortKey, label, filterKey, filters, sortConfig, onSort, onFilterChange, isDate, placeholder, align = 'left' 
 }) => {
     const isActive = sortConfig.key === sortKey;
     const hasFilterValue = Boolean(filters[filterKey]);
+    const isCentered = align === 'center';
 
     const handleTextChange = (e) => {
         let val = e.target.value;
@@ -45,10 +58,12 @@ const SortableHeaderWithFilter = ({
     };
 
     return (
-        <th className="py-3 px-3 align-top select-none bg-slate-50 border-b border-slate-200">
+        <th className={`py-3 px-3 align-top select-none bg-slate-50 border-b border-slate-200 ${isCentered ? 'text-center' : 'text-left'}`}>
             {/* Üst Kısım: Sıralama Başlığı */}
             <div 
-                className="flex items-center justify-between gap-1 cursor-pointer hover:text-blue-600 transition-colors group mb-1.5"
+                className={`flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors group mb-1.5 ${
+                    isCentered ? 'justify-center' : 'justify-between'
+                }`}
                 onClick={() => onSort(sortKey)}
             >
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
@@ -71,9 +86,10 @@ const SortableHeaderWithFilter = ({
                     type="text"
                     value={filters[filterKey] || ''}
                     onChange={handleTextChange}
-                    placeholder={isDate ? "GG.AA.YYYY" : "Ara..."}
+                    placeholder={placeholder || (isDate ? "GG.AA.YYYY" : "Ara...")}
                     maxLength={isDate ? 10 : undefined}
                     className={`w-full bg-white border rounded px-2 pl-6 py-1 text-[11px] font-medium outline-none transition-all shadow-2xs
+                        ${isCentered ? 'text-center' : 'text-left'}
                         ${hasFilterValue ? (isDate ? 'pr-10' : 'pr-6') : (isDate ? 'pr-6' : 'pr-2')}
                         ${hasFilterValue 
                             ? 'border-blue-500 ring-1 ring-blue-500/20 text-blue-900 bg-blue-50/20' 
@@ -111,7 +127,7 @@ const SortableHeaderWithFilter = ({
 // ==========================================
 // 3. ANA BİLEŞEN (MAIN COMPONENT)
 // ==========================================
-const ReservationTable = ({ data, type, isLoading, onRowDoubleClick }) => {
+const ReservationTable = ({ data, type, isLoading, onRowDoubleClick, onOpenRoomAssign }) => {
     const { checkIn, isCheckingIn, checkOut, isCheckingOut } = useReservationAction();
     const { data: systemDate, isLoading: isDateLoading } = useSystemDate();
     const activeDate = systemDate;
@@ -119,7 +135,7 @@ const ReservationTable = ({ data, type, isLoading, onRowDoubleClick }) => {
     // State: Sıralama ve Filtreler
     const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
     const [filters, setFilters] = useState({
-        guest: '', room: '', checkIn: '', checkOut: '', price: '', status: '', agency: ''
+        guest: '', room: '', roomStatus: '', checkIn: '', checkOut: '', price: '', status: '', agency: ''
     });
 
     const handleFilterChange = (key, value) => {
@@ -148,6 +164,7 @@ const ReservationTable = ({ data, type, isLoading, onRowDoubleClick }) => {
         const filtered = data.filter(item => {
             const guestName = (item.guest_full_name || item.guest_name || '').toLowerCase();
             const roomNum = (item.room_number || '').toLowerCase();
+            const roomHkStatus = (item.room_status || '').toLowerCase();
             const priceVal = String(item.total_price || '').toLowerCase();
             const statusVal = (item.status || '').replace('_', ' ').toLowerCase();
             const agencyVal = (item.agency_display || item.agency || '').toLowerCase();
@@ -158,6 +175,7 @@ const ReservationTable = ({ data, type, isLoading, onRowDoubleClick }) => {
 
             if (filters.guest && !guestName.includes(filters.guest.toLowerCase())) return false;
             if (filters.room && !roomNum.includes(filters.room.toLowerCase())) return false;
+            if (filters.roomStatus && !roomHkStatus.includes(filters.roomStatus.toLowerCase())) return false;
             if (filters.checkIn && !checkInFormatted.includes(filters.checkIn)) return false;
             if (filters.checkOut && !checkOutFormatted.includes(filters.checkOut)) return false;
             if (filters.price && !priceVal.includes(filters.price.toLowerCase())) return false;
@@ -186,6 +204,13 @@ const ReservationTable = ({ data, type, isLoading, onRowDoubleClick }) => {
                         return sortConfig.direction === 'asc' 
                             ? aValue.localeCompare(bValue, undefined, { numeric: true }) 
                             : bValue.localeCompare(aValue, undefined, { numeric: true });
+
+                    case 'roomStatus':
+                        aValue = a.room_status || '';
+                        bValue = b.room_status || '';
+                        if (!aValue) return 1;
+                        if (!bValue) return -1;
+                        return sortConfig.direction === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
                     
                     case 'checkIn':
                         aValue = new Date(a.check_in_date).getTime();
@@ -243,8 +268,63 @@ const ReservationTable = ({ data, type, isLoading, onRowDoubleClick }) => {
     }
 
     // ==========================================
-    // 5. AKSİYON BUTONU RENDER EDİCİSİ
+    // 5. YARDIMCI RENDER FONKSİYONLARI
     // ==========================================
+
+    // Oda No Hücresi: Atanmış oda, Hızlı Oda Değiştirme (Room Move) veya Blokaj Atama İkonu
+    const renderRoomCell = (item) => {
+        const isAssignable = ASSIGNABLE_STATUSES.includes(item.status);
+        const canMoveAssignedRoom = item.status === 'RESERVED' && Boolean(item.room_number);
+
+        // Durum 1: Fiziksel oda atanmışsa
+        if (item.room_number) {
+            if (canMoveAssignedRoom && onOpenRoomAssign) {
+                return (
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenRoomAssign(item);
+                        }}
+                        title="Odayı Değiştir (Room Move)"
+                        className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-lg font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 border border-transparent hover:border-blue-200 transition-all cursor-pointer"
+                    >
+                        <BedDouble size={16} className="text-blue-500" />
+                        <span>{item.room_number}</span>
+                    </button>
+                );
+            }
+
+            return (
+                <div className="flex items-center justify-center gap-1.5 font-bold text-slate-700">
+                    <BedDouble size={16} className="text-blue-500" />
+                    <span>{item.room_number}</span>
+                </div>
+            );
+        }
+
+        // Durum 2: Blokajsız (Floating) ve aktif statüdeki rezervasyon -> Blokaj Atama İkonu
+        if (isAssignable && onOpenRoomAssign) {
+            return (
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenRoomAssign(item);
+                    }}
+                    title="Oda Blokajı Ata"
+                    className="inline-flex items-center justify-center p-1.5 rounded-lg bg-amber-50 hover:bg-blue-50 text-amber-600 hover:text-blue-600 border border-amber-200 hover:border-blue-300 shadow-2xs transition-all cursor-pointer hover:scale-105 active:scale-95"
+                >
+                    <KeyRound size={15} />
+                </button>
+            );
+        }
+
+        // Durum 3: İptal / No-Show / Çıkış yapmış ve odasız kayıt
+        return <span className="text-xs font-semibold text-slate-300">-</span>;
+    };
+
+    // Check-in / Check-out Aksiyon Butonu
     const renderActionButtons = (item) => {
         const isFutureArrival = item.check_in_date > activeDate;
         const isFutureDeparture = item.check_out_date > activeDate;
@@ -295,7 +375,8 @@ const ReservationTable = ({ data, type, isLoading, onRowDoubleClick }) => {
                     <thead>
                         <tr>
                             <SortableHeaderWithFilter sortKey="guest" label="Misafir" filterKey="guest" filters={filters} sortConfig={sortConfig} onSort={requestSort} onFilterChange={handleFilterChange} />
-                            <SortableHeaderWithFilter sortKey="room" label="Oda No" filterKey="room" filters={filters} sortConfig={sortConfig} onSort={requestSort} onFilterChange={handleFilterChange} />
+                            <SortableHeaderWithFilter sortKey="room" label="Oda No" filterKey="room" align="center" filters={filters} sortConfig={sortConfig} onSort={requestSort} onFilterChange={handleFilterChange} />
+                            <SortableHeaderWithFilter sortKey="roomStatus" label="Oda Durumu" filterKey="roomStatus" placeholder="VC / VD..." align="center" filters={filters} sortConfig={sortConfig} onSort={requestSort} onFilterChange={handleFilterChange} />
                             <SortableHeaderWithFilter sortKey="checkIn" label="Check-in" filterKey="checkIn" filters={filters} sortConfig={sortConfig} onSort={requestSort} onFilterChange={handleFilterChange} isDate />
                             <SortableHeaderWithFilter sortKey="checkOut" label="Check-out" filterKey="checkOut" filters={filters} sortConfig={sortConfig} onSort={requestSort} onFilterChange={handleFilterChange} isDate />
                             <SortableHeaderWithFilter sortKey="price" label="Bakiye" filterKey="price" filters={filters} sortConfig={sortConfig} onSort={requestSort} onFilterChange={handleFilterChange} />
@@ -311,16 +392,16 @@ const ReservationTable = ({ data, type, isLoading, onRowDoubleClick }) => {
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                         {filteredAndSortedData.length === 0 ? (
                             <tr>
-                                <td colSpan="8" className="text-center py-12 text-slate-400 text-xs font-semibold">
+                                <td colSpan="9" className="text-center py-12 text-slate-400 text-xs font-semibold">
                                     Arama kriterlerine uygun kayıt bulunamadı.
                                 </td>
                             </tr>
                         ) : (
                             filteredAndSortedData.map((item) => {
                                 const guestName = item.guest_full_name || item.guest_name || 'İsimsiz Misafir';
-                                const roomNumber = item.room_number || 'Atanmadı';
                                 const price = Number(item.total_price || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                                 const extraGuestsCount = (item.total_guest_count || 1) - 1;
+                                const roomStatusClass = ROOM_STATUS_BADGE[item.room_status] || 'bg-slate-100 text-slate-600 border-slate-200';
 
                                 return (
                                     <tr
@@ -328,6 +409,7 @@ const ReservationTable = ({ data, type, isLoading, onRowDoubleClick }) => {
                                         onDoubleClick={() => onRowDoubleClick && onRowDoubleClick(item)}
                                         className="hover:bg-slate-50/70 transition-colors cursor-pointer group"
                                     >
+                                        {/* MİSAFİR */}
                                         <td className="py-3.5 px-4">
                                             <div className="flex items-center gap-2">
                                                 <span className="font-bold text-slate-800">{guestName}</span>
@@ -338,27 +420,49 @@ const ReservationTable = ({ data, type, isLoading, onRowDoubleClick }) => {
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="py-3.5 px-4 text-xs font-medium">
-                                            <div className="flex items-center gap-1.5 font-bold text-slate-700">
-                                                <BedDouble size={16} className={item.room_number ? "text-blue-500" : "text-amber-500"} />
-                                                {roomNumber}
+
+                                        {/* ODA NO / BLOKAJ ATAMA İKONU (ORTALANMIŞ) */}
+                                        <td className="py-3.5 px-4 text-xs font-medium text-center">
+                                            <div className="flex items-center justify-center">
+                                                {renderRoomCell(item)}
                                             </div>
                                         </td>
+
+                                        {/* ODA DURUMU / HOUSEKEEPING (ORTALANMIŞ) */}
+                                        <td className="py-3.5 px-4 text-center">
+                                            <div className="flex items-center justify-center">
+                                                {item.room_status ? (
+                                                    <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-md border ${roomStatusClass}`}>
+                                                        {item.room_status}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-xs font-semibold text-slate-300">-</span>
+                                                )}
+                                            </div>
+                                        </td>
+
+                                        {/* CHECK-IN */}
                                         <td className="py-3.5 px-4 text-slate-600 font-medium">
                                             <div className="flex items-center gap-1.5">
                                                 <Calendar size={14} className="text-emerald-500" />
                                                 {formatDate(item.check_in_date)}
                                             </div>
                                         </td>
+
+                                        {/* CHECK-OUT */}
                                         <td className="py-3.5 px-4 text-slate-600 font-medium">
                                             <div className="flex items-center gap-1.5">
                                                 <Calendar size={14} className="text-rose-400" />
                                                 {formatDate(item.check_out_date)}
                                             </div>
                                         </td>
+
+                                        {/* BAKİYE */}
                                         <td className="py-3.5 px-4 font-black text-slate-700">
                                             {price}
                                         </td>
+
+                                        {/* STATÜ */}
                                         <td className="py-3.5 px-4">
                                             <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border
                                                 ${item.status === 'RESERVED' ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : ''}
@@ -369,6 +473,8 @@ const ReservationTable = ({ data, type, isLoading, onRowDoubleClick }) => {
                                                 {item.status?.replace("_", ' ')}
                                             </span>
                                         </td>
+
+                                        {/* ACENTA */}
                                         <td className="py-3.5 px-4">
                                             <div className="flex items-center gap-1.5 text-slate-600">
                                                 <Building size={14} className="text-slate-400" />
@@ -377,6 +483,8 @@ const ReservationTable = ({ data, type, isLoading, onRowDoubleClick }) => {
                                                 </span>
                                             </div>
                                         </td>
+
+                                        {/* AKSİYON */}
                                         <td className="py-3.5 px-4 text-right">
                                             <div className="flex justify-end">
                                                 {renderActionButtons(item)}

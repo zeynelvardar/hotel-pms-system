@@ -66,6 +66,9 @@ DATABASES = {
         'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'pms_secure_password_123'),
         'HOST': os.getenv('POSTGRES_HOST', 'db'),
         'PORT': os.getenv('POSTGRES_PORT', '5432'),
+        'OPTIONS': {
+            'client_encoding': 'UTF8',
+        },
     }
 }
 
@@ -82,6 +85,7 @@ LANGUAGE_CODE = 'tr-tr'
 TIME_ZONE = os.getenv("TIME_ZONE", "Europe/Istanbul")
 USE_I18N = True
 USE_TZ = True
+DEFAULT_CHARSET = 'utf-8'
 
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -112,4 +116,3 @@ CORS_ALLOW_CREDENTIALS = True
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
-

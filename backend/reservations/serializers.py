@@ -1,5 +1,5 @@
 """
-Rezervasyon modülünün okuma (Dashboard) ve yazma (Create/Update) serializer katmanıdır. 
+Rezervasyon modülünün okuma (Dashboard) ve yazma (Create/Update) serializer katmanıdır.
 SoC ve DRY prensipleriyle; 1. misafir, ek misafirler (accompanying_guests),
 acenta (agency), oda blokaj (room) ve oda tipi (booked_room_type) işlemleri atomik olarak yönetilir.
 """
@@ -8,7 +8,7 @@ from typing import Optional
 from rest_framework import serializers
 from django.db import transaction
 from .models import Reservation, ReservationStatus
-from rooms.models import Room, RoomType
+from rooms.models import Room, RoomType, RoomStatus
 from guests.models import Guest
 from guests.serializers import GuestSerializer
 
@@ -22,14 +22,15 @@ class DashboardReservationSerializer(serializers.ModelSerializer):
     guest = GuestSerializer(read_only=True)
     guest_full_name = serializers.CharField(source="guest.__str__", read_only=True)
     guest_phone = serializers.CharField(source="guest.phone", read_only=True)
-    
-    # Blokaj (Fiziksel Oda) - Floating rezervasyonlarda null gelir
+
+    # Blokaj (Fiziksel Oda) ve Durumu (Housekeeping Statüsü) - Floating rezervasyonlarda null gelir
     room_number = serializers.CharField(source="room.room_number", read_only=True, allow_null=True)
-    
+    room_status = serializers.CharField(source="room.status", read_only=True, allow_null=True)
+
     # Satın Alınan Oda Tipi - Envanter ve Kapasite için zorunludur
     booked_room_type_code = serializers.CharField(source="booked_room_type.code", read_only=True)
     booked_room_type_name = serializers.CharField(source="booked_room_type.name", read_only=True)
-    
+
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     agency_display = serializers.CharField(source="get_agency_display", read_only=True)
 
@@ -46,6 +47,7 @@ class DashboardReservationSerializer(serializers.ModelSerializer):
             "guest_phone",
             "room_id",
             "room_number",
+            "room_status",
             "booked_room_type_code",
             "booked_room_type_name",
             "check_in_date",
@@ -61,21 +63,21 @@ class DashboardReservationSerializer(serializers.ModelSerializer):
         ]
 
     def get_total_guest_count(self, obj: Reservation) -> int:
-        # Ana Misafir (1) + eşlik eden diğer misafirler (2., 3... vb.)
-        return 1 + obj.accompanying_guests.count()
+        # prefetch_related("accompanying_guests") önbelleğini kullanarak ekstra COUNT(*) sorgusunu önler
+        return 1 + len(obj.accompanying_guests.all())
 
 
 class ReservationCreateUpdateSerializer(serializers.ModelSerializer):
     """
     Yeni rezervasyon oluşturulurken ve güncellenirken kullanılan yazma (write) serializer'ı.
-    Havuzda bekleyen (Floating/Blokajsız) rezervasyonları destekler.
+    Havuzda bekleyen (Floating/Blokajsız) rezervasyonları ve kısmi (PATCH) oda atamalarını destekler.
     """
     guest = GuestSerializer(required=False)
     accompanying_guests = GuestSerializer(many=True, required=False)
 
-    # Satın alınan oda tipi (Kapasite ve fiyat için her zaman zorunludur)
+    # Satın alınan oda tipi (Yeni kayıtta zorunlu; PATCH ile sadece room_id güncellenirken instance üzerinden korunur)
     booked_room_type_id = serializers.PrimaryKeyRelatedField(
-        queryset=RoomType.objects.all(), source="booked_room_type", required=True
+        queryset=RoomType.objects.all(), source="booked_room_type", required=False
     )
 
     # Fiziksel oda (Opsiyonel: Rezervasyon havuzda bekleyebilir, odaya atanmayabilir)
@@ -105,6 +107,12 @@ class ReservationCreateUpdateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs: dict) -> dict:
         """PMS İş Kuralları (Business Logic) Doğrulamaları"""
+        booked_room_type = attrs.get("booked_room_type", getattr(self.instance, "booked_room_type", None))
+        if not booked_room_type:
+            raise serializers.ValidationError({
+                "booked_room_type_id": "Satın alınan oda tipi belirtilmelidir."
+            })
+
         status = attrs.get("status", getattr(self.instance, "status", ReservationStatus.RESERVED))
         room = attrs.get("room", getattr(self.instance, "room", None))
 
@@ -113,7 +121,13 @@ class ReservationCreateUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "room_id": "Konaklayan (IN_HOUSE) bir misafirin oda blokajı kaldırılamaz."
             })
-            
+
+        # KURAL 2: Arızalı (OOO) veya pasif bir odaya doğrudan blokaj atılamaz.
+        if room and (room.status == RoomStatus.OOO or not room.is_active):
+            raise serializers.ValidationError({
+                "room_id": f"Oda {room.room_number} arızalı (OOO) veya kullanım dışı olduğu için blokaj atılamaz."
+            })
+
         return attrs
 
     def _get_or_update_guests(self, guest_data: dict, is_main_guest: bool = False) -> Optional[Guest]:
@@ -143,9 +157,8 @@ class ReservationCreateUpdateSerializer(serializers.ModelSerializer):
                 setattr(guest_instance, attr, value)
             guest_instance.save()
             return guest_instance
-        else:
-            # Yeni misafir yarat
-            return Guest.objects.create(**guest_data)
+
+        return Guest.objects.create(**guest_data)
 
     @transaction.atomic
     def create(self, validated_data: dict) -> Reservation:

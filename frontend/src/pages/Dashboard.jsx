@@ -9,10 +9,12 @@ import toast from 'react-hot-toast';
 import NewReservationModal from '../components/dashboard/NewReservationModal';
 import ReservationTable from '../components/dashboard/ReservationTable';
 import ReservationCardModal from '../components/dashboard/ReservationCardModal';
+import RoomAssignmentModal from '../components/dashboard/RoomAssignmentModal';
 import { 
   useDashboardReservations, useDashboardArrivals, useDashboardArrivedToday,
   useDashboardInHouse, useDashboardDepartures, useDashboardCheckedOut,
-  useDashboardCancelled, useDashboardAllRecords, useNightAudit, useSystemDate
+  useDashboardCancelled, useDashboardAllRecords, useNightAudit, useSystemDate,
+  useUpdateReservation
 } from '../hooks/useHotelData';
 import {
   LogIn, LogOut, Users, RefreshCw, Plus, CalendarDays,
@@ -31,6 +33,9 @@ const Dashboard = () => {
   const [selectedReservationId, setSelectedReservationId] = useState(null);
   const [isReservationCardOpen, setIsReservationCardOpen] = useState(false);
 
+  // Hızlı Oda Blokajı / Room Move modal state'i
+  const [assignTargetReservation, setAssignTargetReservation] = useState(null);
+
   const { data: systemDate, isLoading: isDateLoading } = useSystemDate();
 
   // ==========================================
@@ -48,6 +53,10 @@ const Dashboard = () => {
   };
 
   const { mutate: runNightAudit, isPending: isAuditPending } = useNightAudit();
+  const { mutate: updateReservation } = useUpdateReservation(() => {
+    setAssignTargetReservation(null);
+  });
+
   const activeData = queries[activeTab] || queries.arrivals;
   const isSyncing = Object.values(queries).some(q => q.isFetching);
 
@@ -84,38 +93,38 @@ const Dashboard = () => {
     toast.custom(
       (t) => (
         <div
-          className={`max-w-md w-full bg-white shadow-2xl rounded-2xl pointer-events-auto border border-slate-200 overflow-hidden transition-all duration-200 ${
+          className={`mt-24 max-w-lg w-full bg-white shadow-2xl rounded-2xl pointer-events-auto border border-slate-200 ring-1 ring-slate-900/10 overflow-hidden transition-all duration-200 ${
             t.visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-2 scale-95'
           }`}
         >
-          <div className="p-4 flex items-start gap-3.5">
-            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 shrink-0">
-              <AlertTriangle size={20} />
+          <div className="p-6 flex items-start gap-4">
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 shrink-0">
+              <AlertTriangle size={24} />
             </div>
 
             <div className="flex-1">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-bold text-slate-800">
+                <h3 className="text-base font-bold text-slate-800">
                   Gün Sonu (Night Audit) Onayı
                 </h3>
                 {systemDate && (
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-slate-100 text-slate-600">
                     {formatDate(systemDate)}
                   </span>
                 )}
               </div>
 
-              <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+              <p className="text-sm text-slate-600 mt-2 leading-relaxed">
                 Dünden kalan gelmemiş misafirler <strong className="text-rose-600">No-Show</strong> olarak işaretlenecek ve sistem günü bir sonraki güne atlayacaktır. Onaylıyor musunuz?
               </p>
             </div>
           </div>
 
-          <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+          <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={() => toast.dismiss(t.id)}
-              className="px-3.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200/70 rounded-lg transition cursor-pointer"
+              className="px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-200/70 rounded-lg transition cursor-pointer"
             >
               Vazgeç
             </button>
@@ -125,17 +134,17 @@ const Dashboard = () => {
                 toast.dismiss(t.id);
                 runNightAudit();
               }}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-lg shadow-sm transition cursor-pointer"
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-lg shadow-sm transition cursor-pointer"
             >
-              <MoonStar size={14} />
+              <MoonStar size={16} />
               Onayla ve Başlat
             </button>
           </div>
         </div>
       ),
       {
-        id: 'night-audit-confirm', // Aynı anda birden fazla onay kutusu açılmasını engeller
-        duration: Infinity,         // Kullanıcı karar verene kadar ekranda kalır
+        id: 'night-audit-confirm',
+        duration: Infinity,
         position: 'top-center',
       }
     );
@@ -144,6 +153,21 @@ const Dashboard = () => {
   const handleRowDoubleClick = (reservation) => {
     setSelectedReservationId(reservation.id);
     setIsReservationCardOpen(true);
+  };
+
+  const handleQuickRoomAssign = (selectedRoomId) => {
+    if (!assignTargetReservation) return;
+
+    // Seçilen oda mevcut odayla aynıysa gereksiz API çağrısını önle
+    if (String(assignTargetReservation.room_id || '') === String(selectedRoomId || '')) {
+      setAssignTargetReservation(null);
+      return;
+    }
+
+    updateReservation({
+      id: assignTargetReservation.id,
+      data: { room_id: selectedRoomId },
+    });
   };
   
   // ==========================================
@@ -233,6 +257,7 @@ const Dashboard = () => {
         type={activeTab}
         isLoading={activeData?.isLoading}
         onRowDoubleClick={handleRowDoubleClick}
+        onOpenRoomAssign={(reservation) => setAssignTargetReservation(reservation)}
       />
 
       {/* 6.4 Yeni Rezervasyon Modalı */}
@@ -250,6 +275,20 @@ const Dashboard = () => {
             setSelectedReservationId(null);
           }}
           reservationData={selectedReservation}
+        />
+      )}
+
+      {/* 6.6 Hızlı Oda Blokajı / Room Move Modalı */}
+      {assignTargetReservation && (
+        <RoomAssignmentModal
+          isOpen={Boolean(assignTargetReservation)}
+          onClose={() => setAssignTargetReservation(null)}
+          onAssign={handleQuickRoomAssign}
+          checkIn={assignTargetReservation.check_in_date}
+          checkOut={assignTargetReservation.check_out_date}
+          initialRoomId={assignTargetReservation.room_id}
+          bookedRoomTypeCode={assignTargetReservation.booked_room_type_code}
+          reservationStatus={assignTargetReservation.status}
         />
       )}
     </div>

@@ -44,6 +44,8 @@ class ReservationViewSet(viewsets.ModelViewSet):
         # N+1 SORGU KORUMASI:
         # room ve room__room_type (fiziksel oda varsa)
         # booked_room_type (fiziksel oda olmasa da kapasite için her zaman vardır)
+        # NOT: 'room' tablosu JOIN edildiği için serializers.py'deki 'room.status' 
+        # okuması veritabanına ekstra tek bir SELECT bile atmaz! (O(1) Performans)
         return Reservation.objects.select_related(
             "guest", "room", "room__room_type", "booked_room_type"
         ).prefetch_related(
