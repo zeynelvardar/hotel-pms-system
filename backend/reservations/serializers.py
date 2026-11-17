@@ -7,7 +7,7 @@ acenta (agency), oda blokaj (room) ve oda tipi (booked_room_type) işlemleri ato
 from typing import Optional
 from rest_framework import serializers
 from django.db import transaction
-from .models import Reservation, ReservationStatus
+from .models import Reservation, ReservationStatus, HotelSettings
 from rooms.models import Room, RoomType, RoomStatus
 from guests.models import Guest
 from guests.serializers import GuestSerializer
@@ -107,6 +107,16 @@ class ReservationCreateUpdateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs: dict) -> dict:
         """PMS İş Kuralları (Business Logic) Doğrulamaları"""
+        current_date = HotelSettings.get_current_date()
+        formatted_sys_date = current_date.strftime("%d.%m.%Y")
+        check_in_date = attrs.get("check_in_date", getattr(self.instance, "check_in_date", None))
+
+        # KURAL 0: Yeni rezervasyon sistem tarihinden önceye açılamaz
+        if not self.instance and check_in_date and check_in_date < current_date:
+            raise serializers.ValidationError({
+                "check_in_date": f"Geçmiş tarihte rezervasyon oluşturulamaz. Giriş tarihi otel sistem gününden ({formatted_sys_date}) önce olamaz."
+            })
+
         booked_room_type = attrs.get("booked_room_type", getattr(self.instance, "booked_room_type", None))
         if not booked_room_type:
             raise serializers.ValidationError({
@@ -141,7 +151,6 @@ class ReservationCreateUpdateSerializer(serializers.ModelSerializer):
         tc_no = guest_data.get("tc_no")
         passport_no = guest_data.get("passport_no")
 
-        # ID zorunluluğunu ve birincil anahtar çakışmasını önlemek için pop yapıyoruz.
         guest_data.pop("id", None)
         guest_data["is_main_guest"] = is_main_guest
 
@@ -152,7 +161,6 @@ class ReservationCreateUpdateSerializer(serializers.ModelSerializer):
             guest_instance = Guest.objects.filter(passport_no=passport_no).first()
 
         if guest_instance:
-            # Mevcut misafir profilini güncel form verileriyle senkronize et
             for attr, value in guest_data.items():
                 setattr(guest_instance, attr, value)
             guest_instance.save()
@@ -209,7 +217,6 @@ class ReservationCreateUpdateSerializer(serializers.ModelSerializer):
                 if acc_guest and acc_guest.id != reservation.guest_id:
                     acc_guests.append(acc_guest)
 
-            # Listeyi tamamen yenile
             reservation.accompanying_guests.set(acc_guests)
 
         return reservation

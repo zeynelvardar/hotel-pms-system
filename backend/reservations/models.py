@@ -119,8 +119,13 @@ class Reservation(models.Model):
 
         # 1. TEMEL TARİH KONTROLÜ
         if self.check_in_date and self.check_out_date:
-            if self.check_out_date < self.check_in_date:
-                raise ValidationError({"check_out_date": "Check-out tarihi, check-in tarihinden önceki bir gün olamaz."})
+            # PMS Kuralı: Konaklama en az 1 gece olmalıdır (Day Use kapsam dışı).
+            if self.check_out_date <= self.check_in_date:
+                raise ValidationError({"check_out_date": "Check-out tarihi, check-in tarihinden sonraki bir gün olmalıdır."})
+            
+            # PMS Kuralı: Yeni oluşturulan rezervasyon sistem tarihinden önceye açılamaz.
+            if not self.pk and self.check_in_date < current_date:
+                raise ValidationError({"check_in_date": f"Geçmişe dönük rezervasyon açılamaz. Giriş tarihi sistem gününden ({current_date}) eski olamaz."})
 
             # 2. UYGULAMA SEVİYESİ ODA ÇAKIŞMA KONTROLÜ (Sadece blokajlı odalar için çalışır)
             if self.room:
