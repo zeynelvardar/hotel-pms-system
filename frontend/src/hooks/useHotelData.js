@@ -4,7 +4,7 @@
  * kullanımını sağlar.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { hotelService } from '../services/hotelService';
 import toast from 'react-hot-toast';
 
@@ -135,6 +135,7 @@ export const useCreateReservation = (onSuccessCallBack) => {
             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             queryClient.invalidateQueries({ queryKey: ['roomRack'] });
             queryClient.invalidateQueries({ queryKey: ['availableRooms'] });
+            queryClient.invalidateQueries({ queryKey: ['forecast'] });
             toast.success('Rezervasyon başarıyla oluşturuldu.');
             if (onSuccessCallBack) onSuccessCallBack();
         },
@@ -154,6 +155,7 @@ export const useUpdateReservation = (onSuccessCallBack) => {
             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             queryClient.invalidateQueries({ queryKey: ['roomRack'] });
             queryClient.invalidateQueries({ queryKey: ['availableRooms'] });
+            queryClient.invalidateQueries({ queryKey: ['forecast'] });
             toast.success('Rezervasyon güncellendi.');
             if (onSuccessCallBack) onSuccessCallBack();
         },
@@ -198,6 +200,7 @@ export const useReservationAction = () => {
             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             queryClient.invalidateQueries({ queryKey: ['roomRack'] });
             queryClient.invalidateQueries({ queryKey: ['availableRooms'] });
+            queryClient.invalidateQueries({ queryKey: ['forecast'] });
             toast.success('Rezervasyon iptal edildi.');
         },
         onError: (error) => {
@@ -257,6 +260,7 @@ export const useNightAudit = () => {
             queryClient.invalidateQueries({ queryKey: ['roomRack'] });
             queryClient.invalidateQueries({ queryKey: ['availableRooms'] });
             queryClient.invalidateQueries({ queryKey: ['systemDate'] });
+            queryClient.invalidateQueries({ queryKey: ['forecast'] });
 
             toast.success(
                 `Gün Sonu Başarılı! Yeni Sistem Günü: ${new Date(data.new_system_date).toLocaleDateString('tr-TR')}\n(${data.no_shows_processed} adet gelmeyen misafir No-Show yapıldı.)`,
@@ -266,5 +270,24 @@ export const useNightAudit = () => {
         onError: (error) => {
             toast.error(extractApiErrorMessage(error, 'Gün sonu işlemi (Night Audit) başlatılamadı.'));
         }
+    });
+};   
+
+// ==========================================
+// 6. RAPORLAMA VE FORECAST HOOK'LARI
+// ==========================================
+
+export const useOccupancyForecast = (startDate, endDate, roomTypeId = '') => {
+    const hasBothDates = Boolean(startDate && endDate);
+    const hasNoDates = !startDate && !endDate;
+    // ISO (YYYY-MM-DD) formatı saat dilimi kayması olmadan doğrudan karşılaştırılabilir.
+    const isDateRangeValid = hasNoDates || (hasBothDates && startDate <= endDate);
+
+    return useQuery({
+        queryKey: ['forecast', startDate || 'default', endDate || 'default', roomTypeId || 'all'],
+        queryFn: () => hotelService.getOccupancyForecast({ startDate, endDate, roomTypeId }),
+        enabled: isDateRangeValid,
+        staleTime: 1000 * 60, // 1 dakika cache; rezervasyon mutasyonları anında invalidate eder.
+        placeholderData: keepPreviousData, // Filtre değişiminde grafik titremesi engeller. (layout shift.)
     });
 };

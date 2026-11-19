@@ -109,5 +109,18 @@ export const hotelService = { // büyük bir nesne
         const response = await api.get('reservations/agency-choices/');
         return response.data;
     },
+
+    // ==========================================
+    // 6. RAPORLAMA VE FORECAST UÇLARI
+    // ==========================================
+    getOccupancyForecast: async ({ startDate, endDate, roomTypeId } = {}) => {
+        const params = {};
+        if (startDate) params.startDate = startDate;
+        if (endDate) params.endDate = endDate;
+        if (roomTypeId) params.roomTypeId = roomTypeId;
+
+        const response = await api.get('reservations/forecast/', { params });
+        return response.data;
+    },
 };
 
