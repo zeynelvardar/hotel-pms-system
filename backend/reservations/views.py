@@ -13,7 +13,7 @@ Katman sadece Frontend ile servisler arasındaki köprü görevini üstlenir:
 - Durum Değişiklikleri ( POST / RPC Aksiyonları )
   - Check-in, Check-out, İptal ve Gün Sonu gibi operasyonel butonları dinler.
 """
-
+import calendar
 from django.core.exceptions import ValidationError
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -23,7 +23,7 @@ from core.pagination import StandardResultsSetPagination
 
 from .models import Reservation, ReservationStatus, HotelSettings, ReservationAgency
 from .serializers import DashboardReservationSerializer, ReservationCreateUpdateSerializer
-from .services import ReservationActionService, NightAuditService
+from .services import ReservationActionService, NightAuditService, OccupancyForecastService
 
 
 class ReservationViewSet(viewsets.ModelViewSet):
@@ -117,6 +117,35 @@ class ReservationViewSet(viewsets.ModelViewSet):
     def get_agency_choices(self, request):
         choices = [{"value": key, "label": label} for key, label in ReservationAgency.choices]
         return Response(choices)
+
+    @action(detail=False, methods=["get"], url_path="forecast")
+    def occupancy_forecast(self, request):
+        """
+        Otelin günlük doluluk oranını ve oda sayılarını döner.
+        Parametre gönderilmezse otel sistem ayının başından sonuna kadar hesaplar.
+        """
+        system_date = HotelSettings.get_current_date() # sistem tarihi
+        last_day_of_month = calendar.monthrange(system_date.year, system_date.month)[1] # ayın son günü
+
+        start_date = request.query_params.get("start_date") or system_date.replace(day=1).isoformat() # tarih kısmını 1 yapar, böylece ayın başı olur.
+        end_date = request.query_params.get("end_date") or system_date.replace(day=last_day_of_month).isoformat() # ayın son gününü hesaplar, end_date boş gelirse ayın sonu alınır.
+        room_type_id = request.query_params.get("room_type_id") or None # oda tipi id'si alınır.
+
+        if room_type_id is not None and not str(room_type_id).isdigit(): # room_type_id tip kontrolü
+            return Response(
+                {"detail": "Geçersiz oda tipi parametresi (room_type_id sayısal olmalıdır.)"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            forecast_data = OccupancyForecastService.generate_forecast(
+                start_date_str=start_date,
+                end_date_str=end_date,
+                room_type_id=room_type_id,
+            )
+            return Response(forecast_data, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
     # ==========================================
