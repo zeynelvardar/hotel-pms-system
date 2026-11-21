@@ -10,9 +10,9 @@ import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/routes/ProtectedRoute';
 import MainLayout from './components/layout/MainLayout';
 import Login from './pages/Login';
-import RoomRack from './pages/RoomRack'
+import RoomRack from './pages/RoomRack';
 import Dashboard from './pages/Dashboard';
-
+import Forecast from './pages/Forecast';
 
 function App() {
   return (
@@ -27,9 +27,14 @@ function App() {
             <Route element={<MainLayout />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/rack" element={<RoomRack />} />
+              <Route path="/forecast" element={<Forecast />} />
               <Route
                 path="/guests"
-                element={<div className="bg-white p-6 rounded-lg border border-slate-200">Misafir Yönetimi</div>}
+                element={
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    Misafir Yönetimi
+                  </div>
+                }
               />
             </Route>
           </Route>
