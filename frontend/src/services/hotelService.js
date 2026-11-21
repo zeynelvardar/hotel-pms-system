@@ -115,9 +115,9 @@ export const hotelService = { // büyük bir nesne
     // ==========================================
     getOccupancyForecast: async ({ startDate, endDate, roomTypeId } = {}) => {
         const params = {};
-        if (startDate) params.startDate = startDate;
-        if (endDate) params.endDate = endDate;
-        if (roomTypeId) params.roomTypeId = roomTypeId;
+        if (startDate) params.start_date = startDate;
+        if (endDate) params.end_date = endDate;
+        if (roomTypeId) params.room_type_id = roomTypeId;
 
         const response = await api.get('reservations/forecast/', { params });
         return response.data;
